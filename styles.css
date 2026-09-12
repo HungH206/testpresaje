@@ -213,13 +213,13 @@ h2 {
     background: linear-gradient(135deg, rgba(45, 212, 191, 0.22), rgba(28, 42, 54, 0.96));
 }
 
-.metric span,
+.metric > span,
 .metric small {
     display: block;
     color: var(--muted);
 }
 
-.metric span {
+.metric > span {
     font-size: 13px;
     font-weight: 800;
     text-transform: uppercase;
@@ -231,6 +231,12 @@ h2 {
     font-size: clamp(30px, 8vw, 54px);
     line-height: 1;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.metric strong span {
+    display: inline;
+    color: inherit;
 }
 
 .metric small {
@@ -331,6 +337,7 @@ input:focus {
     background: rgba(16, 25, 35, 0.72);
     color: var(--muted);
     font-size: 13px;
+    overflow-x: auto;
 }
 
 .history-item strong {
