@@ -79,6 +79,16 @@ This uses `sendFrame(..., PixelFormat.kRGBA, timestampUs)` on the active SDK ses
 
 Relative arterial pressure is waveform shape only. It is not systolic or diastolic blood pressure. HRV needs about 60 seconds, and only applies when pulse is in the valid range. Both need a stationary subject, stable camera, face and upper chest visible, and steady lighting.
 
+## Local Cardio Verification
+
+Use the direct SDK camera test before debugging iPhone/browser streaming:
+
+```bash
+SMARTSPECTRA_API_KEY=your_key_here npm run test:cardio
+```
+
+This runs SmartSpectra with `useCamera()` for 70 seconds and logs validation status, pulse, relative arterial pressure waveform samples, and HRV when the 60-second window is reached.
+
 The on-demand call returns the SmartSpectra `requestId`. Insight responses arrive asynchronously from the SDK `insight` event. The app stores the raw base64 protobuf payload for now; decoding the final `analysis` text needs the Insight protobuf schema from SmartSpectra data types.
 
 Vercel serverless functions cannot hold the long-lived native SDK measurement buffer, so deployed `/api/smartspectra/insights` returns a clear `501` instead of silently pretending to work.

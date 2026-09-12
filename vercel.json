@@ -23,31 +23,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/health",
-      "destination": "/api/health"
-    },
-    {
-      "source": "/smartspectra/status",
-      "destination": "/api/smartspectra/status"
-    },
-    {
-      "source": "/api/smartspectra/insights",
-      "destination": "/api/smartspectra/insights"
-    },
-    {
-      "source": "/api/smartspectra/frame",
-      "destination": "/api/smartspectra/frame"
-    },
-    {
-      "source": "/api/smartspectra/session/start",
-      "destination": "/api/smartspectra/session/start"
-    },
-    {
-      "source": "/api/smartspectra/session/stop",
-      "destination": "/api/smartspectra/session/stop"
-    }
   ]
 }
