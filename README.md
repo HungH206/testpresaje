@@ -13,6 +13,16 @@ npm start
 
 Open `http://localhost:3000` on your computer.
 
+## Environment
+
+Create `.env` from `.env.example` and put your test key there:
+
+```bash
+VITALSCAN_API_KEY=your_test_key_here
+```
+
+The key stays on the server and is not committed to GitHub.
+
 ## Test On Phone
 
 Mobile browsers generally require HTTPS before allowing camera access. Deploy the app to an HTTPS host, or expose your local server through an HTTPS tunnel, then open that HTTPS URL on your phone.
@@ -22,6 +32,6 @@ Mobile browsers generally require HTTPS before allowing camera access. Deploy th
 Commit the app source and lockfile:
 
 ```bash
-git add .gitignore README.md index.html package.json package-lock.json renderer.js server.js styles.css
+git add .gitignore .env.example README.md index.html package.json package-lock.json renderer.js server.js styles.css
 git commit -m "Build VitalScan web app"
 ```

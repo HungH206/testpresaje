@@ -19,7 +19,11 @@ app.use(express.static(__dirname, {
 }));
 
 app.get('/health', (_req, res) => {
-    res.json({ ok: true, app: 'VitalScan' });
+    res.json({
+        ok: true,
+        app: 'VitalScan',
+        hasApiKey: Boolean(process.env.VITALSCAN_API_KEY && process.env.VITALSCAN_API_KEY !== 'replace_with_your_test_key'),
+    });
 });
 
 app.use((_req, res) => {
