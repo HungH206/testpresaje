@@ -12,7 +12,8 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="./icons/icon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260912-camera-tabs">
+    <script>try{if(new URLSearchParams(location.search).get('capture')==='phone')document.documentElement.dataset.phoneCapture='true'}catch{}</script>
+    <link rel="stylesheet" href="./styles.css?v=20260912-baseline-phone">
 </head>
 <body>
     <header class="app-header">
@@ -53,48 +54,48 @@
             <div class="toolbar">
                 <button id="startButton" type="button">Start Scan</button>
                 <button id="stopButton" type="button" disabled>Stop</button>
-                <button id="saveButton" type="button" disabled>Save</button>
+                <button id="saveButton" type="button" disabled>Save Baseline</button>
             </div>
             </div>
         </section>
 
-        <section class="readouts" aria-label="Current scan results">
-            <article class="metric">
-                <span>Breathing</span>
-                <strong><span id="breathingValue">--</span> breaths/min</strong>
-                <small id="breathingText">Waiting for breathing measurements</small>
-            </article>
-            <article class="metric">
-                <span>Face analysis</span>
-                <strong id="faceValue">--</strong>
-                <small id="faceText">Waiting for face measurements</small>
-            </article>
+        <section class="readouts" aria-label="Physiological baseline">
             <article class="metric primary">
                 <span>Pulse</span>
                 <strong><span id="pulseValue">--</span> bpm</strong>
                 <small id="confidenceText">Waiting for scan</small>
             </article>
-            <article class="metric">
-                <span>Signal quality</span>
-                <strong id="qualityValue">--</strong>
-                <small>Keep the camera still with your face and upper chest visible</small>
+            <article class="metric primary">
+                <span>Respiration</span>
+                <strong><span id="breathingValue">--</span> brpm</strong>
+                <small id="breathingText">Waiting for breathing measurements</small>
             </article>
-            <article class="metric">
+            <article class="metric primary">
+                <span>Quality</span>
+                <strong id="qualityValue">--</strong>
+                <small>Stationary capture required</small>
+            </article>
+            <article class="metric diagnostic-metric">
+                <span>Face analysis</span>
+                <strong id="faceValue">--</strong>
+                <small id="faceText">Waiting for face measurements</small>
+            </article>
+            <article class="metric diagnostic-metric">
                 <span>Scan time</span>
                 <strong><span id="timerValue">0</span>s</strong>
-                <small>HRV needs a full 60-second window</small>
+                <small>Baseline saves when pulse, respiration, and quality are ready</small>
             </article>
-            <article class="metric">
+            <article class="metric diagnostic-metric">
                 <span>Pressure waveform</span>
                 <strong id="pressureValue">--</strong>
                 <small id="pressureText">Shape only, not blood pressure</small>
             </article>
             <article class="metric">
-                <span>HRV RMSSD</span>
+                <span>Optional HRV</span>
                 <strong><span id="hrvValue">--</span> ms</strong>
-                <small id="hrvText">60-second window required</small>
+                <small id="hrvText">Not required for demo baseline</small>
             </article>
-            <article class="metric">
+            <article class="metric diagnostic-metric">
                 <span>HRV details</span>
                 <strong id="hrvDetailValue">--</strong>
                 <small id="hrvDetailText">Mean NN, SDNN, Baevsky after confidence is available</small>
@@ -178,6 +179,6 @@
     </main>
 
     <script src="./livekit.bundle.js"></script>
-    <script src="./renderer.js?v=20260912-browser-scan"></script>
+    <script src="./renderer.js?v=20260912-baseline-phone"></script>
 </body>
 </html>

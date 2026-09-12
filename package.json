@@ -4,15 +4,15 @@
   "description": "Browser-based wellness vital scanner for desktop and mobile.",
   "main": "app.js",
   "scripts": {
-    "build": "esbuild public/livekit-client.js --bundle --format=iife --minify --outfile=public/livekit.bundle.js",
-    "predev": "npm run build",
-    "prestart": "npm run build",
+    "build": "npm run build:livekit && next build",
+    "build:livekit": "esbuild public/livekit-client.js --bundle --format=iife --minify --outfile=public/livekit.bundle.js",
     "worker": "node scripts/livekit-worker.js",
     "test:livekit": "node --check scripts/livekit-worker.js && node --test scripts/livekit.test.js scripts/session-recovery.test.js",
-    "start": "node server.js",
-    "dev": "node server.js",
+    "start": "next start",
+    "dev": "npm run build:livekit && next dev",
+    "dev:express": "npm run build:livekit && node server.js",
     "test:cardio": "node scripts/test-cardio-camera.js",
-    "test": "node --check app.js && node --check server.js && node --check api/health.js && node --check api/smartspectra/status.js && node --check api/smartspectra/insights.js && node --check api/smartspectra/frame.js && node --check api/smartspectra/session/start.js && node --check api/smartspectra/session/stop.js && node --check services/smartspectra.js && node --check public/renderer.js"
+    "test": "tsc --noEmit && node --check app.js && node --check server.js && node --check api/health.js && node --check api/smartspectra/status.js && node --check api/smartspectra/insights.js && node --check api/smartspectra/frame.js && node --check api/smartspectra/session/start.js && node --check api/smartspectra/session/stop.js && node --check services/smartspectra.js && node --check public/renderer.js"
   },
   "repository": {
     "type": "git",
@@ -21,7 +21,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "engines": {
+    "node": "24.x"
+  },
   "bugs": {
     "url": "https://github.com/HungH206/testpresaje/issues"
   },
@@ -29,12 +31,19 @@
   "dependencies": {
     "@livekit/rtc-node": "^1.0.0",
     "@smartspectra/node-sdk": "^3.3.0",
+    "@types/node": "^24.13.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",
     "express": "^5.2.1",
     "livekit-client": "^2.22.3",
-    "livekit-server-sdk": "^2.19.0"
+    "livekit-server-sdk": "^2.19.0",
+    "next": "^16.3.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2"
   }
 }

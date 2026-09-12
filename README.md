@@ -107,6 +107,33 @@ Open the Vercel deployment URL on the iPhone, tap **Start Scan**, and allow came
 
 Live SmartSpectra frame streaming and LLM Insights require a persistent Node/Express process. Vercel serverless routes return clean no-op JSON responses for those live session endpoints so iPhone camera testing stays smooth.
 
+## Deploy The LiveKit Worker
+
+The scan worker must run as a persistent process. Use Render for this part and keep the Next.js app on Vercel.
+
+This repo includes `render.yaml` for a Render background worker:
+
+```bash
+npm run worker
+```
+
+Create a Render Blueprint from the GitHub repo, then set these worker environment variables:
+
+```dotenv
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_ACCESS_CODE=the_same_code_used_by_vercel
+LIVEKIT_ROOM=vitalscan-test
+SMARTSPECTRA_API_KEY=your_presage_key
+```
+
+The worker is ready when Render logs show:
+
+```text
+LiveKit worker connected. Waiting for a camera.
+```
+
 ## Commit
 
 Commit the app source and lockfile:

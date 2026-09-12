@@ -1,8 +1,9 @@
 # LiveKit camera testing
 
-The website publishes camera video to LiveKit Cloud. A persistent Mac worker
+The website publishes camera video to LiveKit Cloud. A persistent worker
 subscribes, decodes frames, runs SmartSpectra, and publishes results back to the
-room. The phone and dashboard can use Vercel HTTPS. No Cloudflare tunnel or
+room. The phone and dashboard can use Vercel HTTPS, while the worker can run on
+Render. No Cloudflare tunnel or
 browser frame-upload endpoint is used by this workflow.
 
 ## Configuration
@@ -21,7 +22,8 @@ SMARTSPECTRA_API_KEY=your_presage_key
 ```
 
 Set the same five LIVEKIT variables in Vercel, then redeploy with the build
-command `npm run build`. The SmartSpectra key stays on the processing Mac.
+command `npm run build`. Set the same LiveKit variables plus
+`SMARTSPECTRA_API_KEY` on the Render worker.
 Never put API secrets in browser JavaScript or in a URL.
 
 This is a shared, single-scan test room. Everyone with the test access code can
@@ -30,7 +32,7 @@ rotate it after testing. The token endpoint issues short-lived, room-scoped
 tokens; it never issues processor credentials to browsers. Production needs
 user authentication and isolated rooms/workers per scan.
 
-## Run
+## Run locally
 
 ```sh
 npm install
@@ -39,6 +41,32 @@ npm run worker
 
 Keep the worker running on your Mac. In another terminal, `npm run dev` serves
 the local dashboard, or use the deployed Vercel site on both devices.
+
+## Deploy the worker on Render
+
+This repo includes `render.yaml`, which defines a background worker service:
+
+```yaml
+startCommand: npm run worker
+```
+
+In Render, create a new Blueprint from this repository and set these environment
+variables on the `vitalscan-livekit-worker` service:
+
+```dotenv
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_ACCESS_CODE=the_same_code_used_by_vercel
+LIVEKIT_ROOM=vitalscan-test
+SMARTSPECTRA_API_KEY=your_presage_key
+```
+
+Use Node 24. The blueprint sets `NODE_VERSION=24`, and `package.json` also pins
+the app to Node 24.x.
+
+When the Render logs show `LiveKit worker connected. Waiting for a camera.`, the
+Vercel dashboard should stop reporting `Mac worker offline`.
 
 On the dashboard, enter the test access code, select **Use Phone Camera**, and
 click **Connect Dashboard**. Enter your deployed website URL in the address

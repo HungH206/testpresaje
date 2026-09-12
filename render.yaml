@@ -1,0 +1,22 @@
+services:
+  - type: worker
+    name: vitalscan-livekit-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run worker
+    envVars:
+      - key: NODE_VERSION
+        value: 24
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: LIVEKIT_ACCESS_CODE
+        sync: false
+      - key: LIVEKIT_ROOM
+        value: vitalscan-test
+      - key: SMARTSPECTRA_API_KEY
+        sync: false

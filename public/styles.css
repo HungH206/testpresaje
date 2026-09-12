@@ -226,6 +226,34 @@ h2 {
     background: linear-gradient(135deg, rgba(45, 212, 191, 0.22), rgba(28, 42, 54, 0.96));
 }
 
+html[data-phone-capture="true"] .diagnostic-metric,
+html[data-phone-capture="true"] .run-mode,
+html[data-phone-capture="true"] .chart-section,
+html[data-phone-capture="true"] .manual-entry,
+html[data-phone-capture="true"] .insights,
+body[data-phone-capture="true"] .diagnostic-metric,
+body[data-phone-capture="true"] .run-mode,
+body[data-phone-capture="true"] .chart-section,
+body[data-phone-capture="true"] .manual-entry,
+body[data-phone-capture="true"] .insights {
+    display: none;
+}
+
+html[data-phone-capture="true"] .readouts,
+body[data-phone-capture="true"] .readouts {
+    gap: 10px;
+}
+
+html[data-phone-capture="true"] .metric,
+body[data-phone-capture="true"] .metric {
+    padding: 14px;
+}
+
+html[data-phone-capture="true"] .metric strong,
+body[data-phone-capture="true"] .metric strong {
+    font-size: clamp(32px, 12vw, 48px);
+}
+
 .metric > span,
 .metric small {
     display: block;

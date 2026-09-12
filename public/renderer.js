@@ -45,7 +45,10 @@ const scan = {
     startedAt: 0,
     samples: [],
     pulse: null,
+    breathing: null,
     quality: 0,
+    qualityLabel: null,
+    hrv: null,
     running: false,
     sdkStreaming: false,
     nativeSessionEnabled: false,
@@ -60,6 +63,10 @@ const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.h
 const query = new URLSearchParams(window.location.search);
 const useBrowserFrameBridge = true;
 const phoneCapture = query.get('capture') === 'phone';
+if (phoneCapture) {
+    document.documentElement.dataset.phoneCapture = 'true';
+    document.body.dataset.phoneCapture = 'true';
+}
 let watchingPhone = false;
 let latestStatus = null;
 let statusInFlight = false;
@@ -101,7 +108,10 @@ function resetScan() {
     scan.startedAt = performance.now();
     scan.samples = [];
     scan.pulse = null;
+    scan.breathing = null;
     scan.quality = 0;
+    scan.qualityLabel = null;
+    scan.hrv = null;
     scan.sdkStreaming = false;
     scan.nativeCameraMode = false;
     scan.lastPixels = null;
@@ -126,17 +136,16 @@ function renderScanTime(seconds) {
     els.timer.textContent = `${Math.min(seconds, hrvWindowSeconds)}/${hrvWindowSeconds}`;
 }
 
-function hasHrvSample(status = latestStatus) {
-    const hrv = status?.latestVitals?.hrv;
-    return Boolean(hrv?.confidence > 0 && Number.isFinite(hrv.rmssd));
-}
-
 function canSaveReading() {
-    return Boolean(scan.pulse && (elapsedScanSeconds() >= hrvWindowSeconds || hasHrvSample()));
+    return Boolean(scan.pulse && scan.breathing && scan.quality > 0);
 }
 
 function updateSaveState() {
     els.save.disabled = !canSaveReading();
+}
+
+function roundOptional(value) {
+    return Number.isFinite(value) ? Math.round(value) : null;
 }
 
 async function startCamera() {
@@ -290,6 +299,7 @@ function renderQuality(frame) {
     let label = 'Weak';
     if (frame.quality >= 70) label = 'Good';
     else if (frame.quality >= 40) label = 'Fair';
+    scan.qualityLabel = label;
 
     els.quality.textContent = label;
     els.quality.dataset.quality = label.toLowerCase();
@@ -402,7 +412,13 @@ async function pollSdkStatus() {
             setStatus(connected ? 'Receiving' : 'Waiting', connected ? 'running' : 'ready');
         }
         const vitals = status.latestVitals || {};
-        $('breathingValue').textContent = Number.isFinite(vitals.breathingRate) && vitals.breathingConfidence > 0 ? String(Math.round(vitals.breathingRate)) : '--';
+        if (Number.isFinite(vitals.breathingRate) && vitals.breathingConfidence > 0) {
+            scan.breathing = Math.round(vitals.breathingRate);
+            $('breathingValue').textContent = String(scan.breathing);
+            updateSaveState();
+        } else {
+            $('breathingValue').textContent = '--';
+        }
         $('breathingText').textContent = Number.isFinite(vitals.breathingConfidence)
             ? `Confidence ${Math.round(vitals.breathingConfidence)}%`
             : 'No current breathing sample';
@@ -431,13 +447,20 @@ async function pollSdkStatus() {
         }
 
         if (vitals.hrv?.confidence > 0 && Number.isFinite(vitals.hrv.rmssd)) {
+            scan.hrv = {
+                rmssd: roundOptional(vitals.hrv.rmssd),
+                meanNn: roundOptional(vitals.hrv.meanNn),
+                sdnn: roundOptional(vitals.hrv.sdnn),
+                baevsky: roundOptional(vitals.hrv.baevsky),
+                confidence: roundOptional(vitals.hrv.confidence),
+                stable: Boolean(vitals.hrv.stable),
+            };
             els.hrv.textContent = String(Math.round(vitals.hrv.rmssd));
             els.hrvText.textContent = vitals.hrv.stable
                 ? `Stable, confidence ${Math.round(vitals.hrv.confidence)}%`
                 : `Collecting, confidence ${Math.round(vitals.hrv.confidence)}%`;
-            els.hrvDetail.textContent = `${Math.round(vitals.hrv.meanNn)} / ${Math.round(vitals.hrv.sdnn)}`;
-            els.hrvDetailText.textContent = `Mean NN / SDNN ms, Baevsky ${Math.round(vitals.hrv.baevsky)}`;
-            updateSaveState();
+            els.hrvDetail.textContent = `${roundOptional(vitals.hrv.meanNn) || '--'} / ${roundOptional(vitals.hrv.sdnn) || '--'}`;
+            els.hrvDetailText.textContent = `Mean NN / SDNN ms, Baevsky ${roundOptional(vitals.hrv.baevsky) || '--'}`;
         }
 
         if (Number.isFinite(vitals.arterialPressureTrace) && Array.isArray(status.arterialPressureSeries) && status.arterialPressureSeries.length > 1) {
@@ -492,6 +515,8 @@ function clearReadouts() {
     $('faceText').textContent = 'No current face sample';
     els.save.disabled = true;
     scan.pulse = null;
+    scan.breathing = null;
+    scan.hrv = null;
     drawChart([]);
 }
 
@@ -597,7 +622,10 @@ function addReading(extra = {}) {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         pulse: scan.pulse,
+        respiration: scan.breathing,
         quality: scan.quality,
+        qualityLabel: scan.qualityLabel,
+        hrv: scan.hrv,
         spo2: extra.spo2 || '',
         temp: extra.temp || '',
         bp: extra.bp || '',
@@ -623,7 +651,9 @@ function renderHistory() {
             <article class="history-item">
                 <strong>${date}</strong>
                 <span>Pulse ${item.pulse || '--'} bpm</span>
-                <span>Quality ${item.quality || 0}%</span>
+                <span>Respiration ${item.respiration || '--'} brpm</span>
+                <span>Quality ${item.qualityLabel || '--'}${item.quality ? ` (${item.quality}%)` : ''}</span>
+                ${item.hrv?.rmssd ? `<span>HRV ${item.hrv.rmssd} ms</span>` : ''}
                 <span>SpO2 ${item.spo2 || '--'}%</span>
                 <span>Temp ${item.temp || '--'} F</span>
                 <span>BP ${item.bp || '--'}</span>

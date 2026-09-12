@@ -1,6 +1,8 @@
 .rocketride/
 node_modules/
+.next/
 .env
 .DS_Store
 npm-debug.log*
 public/livekit.bundle.js
+tsconfig.tsbuildinfo
