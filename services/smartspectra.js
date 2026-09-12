@@ -28,6 +28,7 @@ function loadSdkExports() {
             SmartSpectraSDK: null,
             breathingMetrics: [],
             cardioMetrics: [],
+            faceMetrics: [],
             decodeMetrics: null,
         };
     }
@@ -40,6 +41,7 @@ function loadSdkExports() {
             SmartSpectraSDK: null,
             breathingMetrics: [],
             cardioMetrics: [],
+            faceMetrics: [],
             decodeMetrics: null,
         };
     }
@@ -50,6 +52,7 @@ function getRequestedMetrics() {
     return [
         ...(sdk.breathingMetrics || []),
         ...(sdk.cardioMetrics || []),
+        ...(sdk.faceMetrics || []),
     ];
 }
 
@@ -63,7 +66,7 @@ function getSdkStatus() {
         nativeSessionEnabled: process.env.VERCEL !== '1' || process.env.SMARTSPECTRA_NATIVE_ENABLED === '1',
         version: sdk.SmartSpectraSDK?.version || null,
         hasApiKey: hasConfiguredApiKey(),
-        requestedBundles: ['breathing', 'cardio'],
+        requestedBundles: ['breathing', 'cardio', 'face'],
         requestedMetricCount: requestedMetrics.length,
         insightSupport: Boolean(sdk.SmartSpectraSDK),
         sessionActive: Boolean(activeSession),
@@ -247,9 +250,12 @@ function sendCustomFrame(frame) {
     const sdk = loadSdkExports();
 
     if (!activeSession || activeSource !== 'custom') {
-        const error = new Error('Start a SmartSpectra session with source "custom" before sending browser frames.');
-        error.statusCode = 409;
-        throw error;
+        return {
+            accepted: false,
+            sessionActive: Boolean(activeSession),
+            activeSource,
+            message: 'Start a SmartSpectra session with source "custom" before sending browser frames.',
+        };
     }
 
     const width = Number(frame.width);
@@ -290,7 +296,10 @@ function sendCustomFrame(frame) {
         receivedAt: new Date().toISOString(),
     };
 
-    return lastFrame;
+    return {
+        accepted: Boolean(sent),
+        ...lastFrame,
+    };
 }
 
 function readLatestVitals(buffer) {
@@ -302,11 +311,20 @@ function readLatestVitals(buffer) {
 
     return {
         breathingRate: metrics.breathing?.rate?.at(-1)?.value ?? null,
+        breathingConfidence: metrics.breathing?.rate?.at(-1)?.confidence ?? null,
         chestTrace: metrics.breathing?.upperTrace?.at(-1)?.value ?? null,
         abdomenTrace: metrics.breathing?.lowerTrace?.at(-1)?.value ?? null,
         pulseRate: metrics.cardio?.pulseRate?.at(-1)?.value ?? null,
+        pulseConfidence: metrics.cardio?.pulseRate?.at(-1)?.confidence ?? null,
         arterialPressureTrace: metrics.cardio?.arterialPressureTrace?.at(-1)?.value ?? null,
-        hrvRmssd: metrics.cardio?.hrv?.at(-1)?.rmssd ?? null,
+        hrv: metrics.cardio?.hrv?.at(-1) ?? null,
+        face: {
+            landmarks: metrics.face?.landmarks?.at(-1)?.value ?? null,
+            landmarksCount: metrics.face?.landmarks?.at(-1)?.value?.length ?? 0,
+            blinking: metrics.face?.blinking?.at(-1)?.detected ?? null,
+            talking: metrics.face?.talking?.at(-1)?.detected ?? null,
+            expression: metrics.face?.expression?.at(-1) ?? null,
+        },
     };
 }
 

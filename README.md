@@ -43,10 +43,10 @@ const app = createApp();
 
 ## SmartSpectra Metrics
 
-The server configures SmartSpectra with the breathing and cardio bundles:
+The server configures SmartSpectra with the breathing, cardio, and face bundles:
 
 ```js
-requestedMetrics: [...breathingMetrics, ...cardioMetrics]
+requestedMetrics: [...breathingMetrics, ...cardioMetrics, ...faceMetrics]
 ```
 
 The status endpoint confirms whether the SDK is available, whether an API key is configured, and how many metric codes are being requested:
@@ -75,7 +75,9 @@ The Node SDK captures in the Node process for `source: "camera"`. For browser or
 POST /api/smartspectra/frame
 ```
 
-This uses `sendFrame(..., PixelFormat.kRGBA, timestampUs)` on the active SDK session.
+This uses `sendFrame(..., PixelFormat.kRGBA, timestampUs)` on the active SDK session. Hosted Vercel/iPhone test mode skips this by default and stays browser-only; add `?native=1` only when the URL points at a persistent Node server that can hold an SDK session.
+
+Breathing rate needs about 30 seconds of stable face/chest video before confidence becomes useful. HRV needs about 60 seconds, and only applies when pulse is in the valid range. Face analysis needs a forward-facing, unobstructed, well-lit face.
 
 The on-demand call returns the SmartSpectra `requestId`. Insight responses arrive asynchronously from the SDK `insight` event. The app stores the raw base64 protobuf payload for now; decoding the final `analysis` text needs the Insight protobuf schema from SmartSpectra data types.
 
@@ -93,7 +95,7 @@ git push
 
 Open the Vercel deployment URL on the iPhone, tap **Start Scan**, and allow camera access. The hosted Vercel version runs camera preview, whole-frame quality scoring, charting, and local history in the browser.
 
-Live SmartSpectra frame streaming and LLM Insights require a persistent Node/Express process. Vercel serverless routes return clear `501` responses for those live session endpoints.
+Live SmartSpectra frame streaming and LLM Insights require a persistent Node/Express process. Vercel serverless routes return clean no-op JSON responses for those live session endpoints so iPhone camera testing stays smooth.
 
 ## Commit
 

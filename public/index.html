@@ -12,7 +12,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="./icons/icon.svg">
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css?v=20260912-frame-noop">
 </head>
 <body>
     <header class="app-header">
@@ -54,6 +54,21 @@
                 <span>Scan time</span>
                 <strong><span id="timerValue">0</span>s</strong>
                 <small>Best after 20-30 seconds</small>
+            </article>
+            <article class="metric">
+                <span>Breathing rate</span>
+                <strong><span id="breathingValue">--</span> br/min</strong>
+                <small id="breathingText">30-second window required</small>
+            </article>
+            <article class="metric">
+                <span>HRV RMSSD</span>
+                <strong><span id="hrvValue">--</span> ms</strong>
+                <small id="hrvText">60-second window required</small>
+            </article>
+            <article class="metric">
+                <span>Face analysis</span>
+                <strong id="faceValue">--</strong>
+                <small id="faceText">Face should be forward, visible, and well lit</small>
             </article>
         </section>
 
@@ -108,6 +123,6 @@
         </aside>
     </main>
 
-    <script src="./renderer.js"></script>
+    <script src="./renderer.js?v=20260912-frame-noop"></script>
 </body>
 </html>

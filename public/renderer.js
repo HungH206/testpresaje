@@ -15,6 +15,12 @@ const els = {
     confidence: $('confidenceText'),
     quality: $('qualityValue'),
     timer: $('timerValue'),
+    breathing: $('breathingValue'),
+    breathingText: $('breathingText'),
+    hrv: $('hrvValue'),
+    hrvText: $('hrvText'),
+    face: $('faceValue'),
+    faceText: $('faceText'),
     sampleCount: $('sampleCount'),
     form: $('manualForm'),
     spo2: $('spo2Input'),
@@ -47,6 +53,8 @@ const maxSamples = 900;
 const frameWidth = 320;
 const frameHeight = 240;
 const frameIntervalMs = 180;
+const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+const forceNativeStreaming = new URLSearchParams(window.location.search).get('native') === '1';
 
 function setStatus(text, state) {
     els.status.textContent = text;
@@ -62,6 +70,9 @@ function resetScan() {
     scan.lastFrameSentAt = 0;
     scan.lastPixels = null;
     els.pulse.textContent = '--';
+    els.breathing.textContent = '--';
+    els.hrv.textContent = '--';
+    els.face.textContent = '--';
     els.quality.textContent = '--';
     els.confidence.textContent = 'Checking camera environment';
     els.timer.textContent = '0';
@@ -154,6 +165,13 @@ function readWholeFrame() {
 }
 
 async function startSdkStream() {
+    if (!isLocalHost && !forceNativeStreaming) {
+        scan.nativeSessionEnabled = false;
+        scan.sdkStreaming = false;
+        els.confidence.textContent = 'Hosted iPhone camera test mode';
+        return;
+    }
+
     await pollSdkStatus();
 
     if (!scan.nativeSessionEnabled) {
@@ -217,7 +235,16 @@ async function sendFrameToSdk(frame) {
             }),
         });
 
-        if (!response.ok) scan.sdkStreaming = false;
+        if (!response.ok) {
+            scan.sdkStreaming = false;
+            return;
+        }
+
+        const payload = await response.json();
+        if (payload.accepted === false || payload.hostedMode) {
+            scan.sdkStreaming = false;
+            els.confidence.textContent = payload.message || 'Hosted iPhone camera test mode';
+        }
     } catch {
         scan.sdkStreaming = false;
     }
@@ -275,16 +302,48 @@ function drawChart() {
 }
 
 async function pollSdkStatus() {
+    if (!isLocalHost && !forceNativeStreaming) {
+        scan.nativeSessionEnabled = false;
+        els.insightStatus.textContent = 'Hosted camera test mode';
+        return;
+    }
+
     try {
         const response = await fetch('/api/smartspectra/status');
         const status = await response.json();
-        const pulseRate = status.latestVitals?.pulseRate;
+        const vitals = status.latestVitals || {};
+        const pulseRate = vitals.pulseRate;
         scan.nativeSessionEnabled = Boolean(status.nativeSessionEnabled);
 
         if (typeof pulseRate === 'number') {
             scan.pulse = Math.round(pulseRate);
             els.pulse.textContent = String(scan.pulse);
             els.save.disabled = false;
+        }
+
+        if (typeof vitals.breathingRate === 'number') {
+            els.breathing.textContent = String(Math.round(vitals.breathingRate));
+            els.breathingText.textContent = vitals.breathingConfidence == null
+                ? 'Breathing metric active'
+                : `Confidence ${Math.round(vitals.breathingConfidence)}%`;
+        }
+
+        if (vitals.hrv) {
+            els.hrv.textContent = String(Math.round(vitals.hrv.rmssd));
+            els.hrvText.textContent = vitals.hrv.stable
+                ? `Stable, confidence ${Math.round(vitals.hrv.confidence)}%`
+                : `Collecting, confidence ${Math.round(vitals.hrv.confidence)}%`;
+        }
+
+        if (vitals.face) {
+            const faceSignals = [];
+            if (vitals.face.landmarksCount) faceSignals.push(`${vitals.face.landmarksCount} landmarks`);
+            if (typeof vitals.face.blinking === 'boolean') faceSignals.push(vitals.face.blinking ? 'blink' : 'eyes open');
+            if (typeof vitals.face.talking === 'boolean') faceSignals.push(vitals.face.talking ? 'talking' : 'quiet');
+            els.face.textContent = faceSignals.length ? 'Active' : '--';
+            els.faceText.textContent = faceSignals.length
+                ? faceSignals.join(', ')
+                : 'Waiting for face metrics';
         }
 
         if (status.validationStatus?.hint) {

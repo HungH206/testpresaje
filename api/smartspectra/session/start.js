@@ -1,7 +1,10 @@
 'use strict';
 
 module.exports = function smartspectraSessionStartHandler(_req, res) {
-    res.status(501).json({
-        error: 'Live SmartSpectra sessions need a persistent Express server. The iPhone Vercel build supports HTTPS camera UI testing only.',
+    res.status(200).json({
+        sessionActive: false,
+        hostedMode: true,
+        nativeSessionEnabled: false,
+        message: 'Hosted iPhone test mode uses browser camera quality only.',
     });
 };
