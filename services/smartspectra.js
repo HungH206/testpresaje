@@ -18,6 +18,7 @@ let metricsPacketCount = 0;
 let arterialPressureSeries = [];
 let customFrameShape = null;
 const maxSeriesPoints = 600;
+let loggedMetricRequest = false;
 
 function getApiKey() {
     return process.env.SMARTSPECTRA_API_KEY || process.env.VITALSCAN_API_KEY || '';
@@ -113,9 +114,18 @@ function createSmartSpectraSession() {
         throw new Error('Set SMARTSPECTRA_API_KEY or VITALSCAN_API_KEY before starting SmartSpectra.');
     }
 
+    const requestedMetrics = getRequestedMetrics();
+    if (!loggedMetricRequest) {
+        loggedMetricRequest = true;
+        console.log('SmartSpectra requested metrics:', {
+            mode: (process.env.SMARTSPECTRA_METRIC_MODE || 'baseline').toLowerCase(),
+            requestedMetrics,
+        });
+    }
+
     return new sdk.SmartSpectraSDK({
         apiKey: getApiKey(),
-        requestedMetrics: getRequestedMetrics(),
+        requestedMetrics,
         logLevel: sdk.SmartSpectraLogLevel?.kWarning,
     });
 }

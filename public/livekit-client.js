@@ -87,7 +87,7 @@ async function waitForWorker(predicate, timeoutMessage) {
 async function start(stream) {
     await connect('publisher');
     // Confirm readiness from the worker heartbeat, without a separate RPC exchange.
-    const ready = await waitForWorker(() => true, 'Processor offline. Check the LiveKit Agent or run npm run worker locally.');
+    const ready = await waitForWorker(() => true, 'Processor offline. Start the worker with npm run worker on your Mac or VPS.');
     if (!ready.worker?.ready) throw new Error('SmartSpectra is not configured on the processor.');
     if (ready.transport?.publisherIdentity) throw new Error('Another camera is scanning. Stop it first.');
     const candidate = room;
@@ -139,7 +139,7 @@ window.vitalLivekit = {
     getStatus() {
         if (connectionError || scanError) throw new Error(connectionError || scanError);
         if (!room || room.state !== 'connected') throw new Error('Not connected');
-        if (!status || Date.now() - updatedAt > 5000) throw new Error('Processor offline. Check the LiveKit Agent or run npm run worker locally.');
+        if (!status || Date.now() - updatedAt > 5000) throw new Error('Processor offline. Start the worker with npm run worker on your Mac or VPS.');
         return status;
     },
     get captureFps() { return captureFps; },

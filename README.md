@@ -105,43 +105,45 @@ git push
 
 Open the Vercel deployment URL on the iPhone, tap **Start Scan**, and allow camera access. The hosted Vercel version runs camera preview, whole-frame quality scoring, charting, and local history in the browser.
 
-Live SmartSpectra frame streaming and LLM Insights require a persistent Node/Express process. Vercel serverless routes return clean no-op JSON responses for those live session endpoints so iPhone camera testing stays smooth.
+Live SmartSpectra frame streaming requires a persistent Node worker. Vercel hosts the HTTPS app, while `npm run worker` runs the processor from your Mac or VPS.
 
-## Deploy The LiveKit Agent
+## Deploy The Worker
 
-The scan processor should run as a LiveKit Agent. Keep the Next.js app on Vercel and deploy the realtime processor with LiveKit Cloud.
+Keep the Next.js app on Vercel and run the realtime processor as a normal Node process on your Mac or VPS.
 
-Set `LIVEKIT_AGENT_NAME` in Vercel so the token endpoint explicitly dispatches the agent into the scan room:
-
-```dotenv
-LIVEKIT_AGENT_NAME=vitalscan-agent
-```
-
-Deploy the agent with the LiveKit CLI:
-
-```bash
-lk cloud auth
-lk agent create .
-lk agent status
-lk agent logs
-```
-
-Set these LiveKit Agent secrets:
+Set these values in Vercel:
 
 ```dotenv
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_ACCESS_CODE=a-long-random-test-access-code
 LIVEKIT_ROOM=vitalscan-test
-LIVEKIT_AGENT_NAME=vitalscan-agent
-SMARTSPECTRA_API_KEY=your_presage_key
 ```
 
-For local development without deploying an agent, `npm run worker` still runs the same processor from your Mac.
-You can also run the Agent Framework entrypoint locally:
+Set these values on the worker host:
+
+```dotenv
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_livekit_api_key
+LIVEKIT_API_SECRET=your_livekit_api_secret
+LIVEKIT_ACCESS_CODE=a-long-random-test-access-code
+LIVEKIT_ROOM=vitalscan-test
+SMARTSPECTRA_API_KEY=your_presage_key
+SMARTSPECTRA_METRIC_MODE=baseline
+```
+
+Run locally:
 
 ```bash
-npm run agent:dev
+npm run worker
+```
+
+Run on a VPS with PM2:
+
+```bash
+pm2 start npm --name vitalscan-worker -- run worker
+pm2 save
 ```
 
 ## Commit

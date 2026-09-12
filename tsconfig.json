@@ -25,7 +25,6 @@
     "next-env.d.ts",
     "pages/**/*.ts",
     "pages/**/*.tsx",
-    "src/**/*.ts",
     "types/**/*.ts"
   ],
   "exclude": [
