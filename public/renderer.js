@@ -437,10 +437,10 @@ async function pollSdkStatus() {
                 ? `${status.requestedMetricCount} metrics configured`
                 : 'SDK unavailable';
         }
-    } catch {
+    } catch (error) {
         latestStatus = null;
         scan.nativeSessionEnabled = false;
-        if (watchingPhone) $('phoneConnection').textContent = 'Connection lost';
+        if (watchingPhone) $('phoneConnection').textContent = error.message || 'Connection lost';
         els.insightStatus.textContent = 'Status unavailable';
         renderRunMode();
     } finally {

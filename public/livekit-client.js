@@ -1,4 +1,4 @@
-import { Room, RoomEvent, LocalVideoTrack, Track } from 'livekit-client';
+import { Room, RoomEvent, LocalVideoTrack, Track, DisconnectReason, ConnectionErrorReason } from 'livekit-client';
 
 let room;
 let track;
@@ -7,10 +7,12 @@ let updatedAt = 0;
 let role;
 let captureCallback;
 let captureFps = 0;
+let connectionError = null;
 
 async function connect(nextRole) {
     if (room && role === nextRole && room.state === 'connected') return;
     await disconnect();
+    connectionError = null;
     const response = await fetch('/api/livekit/token', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: nextRole, accessCode: document.getElementById('livekitCode').value }),
@@ -24,12 +26,20 @@ async function connect(nextRole) {
         try { status = JSON.parse(new TextDecoder().decode(data)); updatedAt = Date.now(); }
         catch { /* Ignore malformed packets. */ }
     });
-    room.on(RoomEvent.Disconnected, () => {
+    room.on(RoomEvent.Disconnected, (reason) => {
         status = null; updatedAt = 0;
+        connectionError = `LiveKit disconnected: ${DisconnectReason[reason] || 'unknown reason'}`;
         if (track) window.dispatchEvent(new Event('livekit-lost'));
     });
     try { await room.connect(credentials.url, credentials.token); }
-    catch (error) { await disconnect(); throw error; }
+    catch (error) {
+        const reason = error.reason === ConnectionErrorReason.LeaveRequest
+            ? DisconnectReason[error.context]
+            : error.reasonName;
+        await disconnect();
+        connectionError = `LiveKit connection failed: ${reason || 'network or signaling failure'}`;
+        throw new Error(connectionError);
+    }
 }
 
 async function start(stream) {
@@ -68,7 +78,9 @@ async function disconnect() {
 window.vitalLivekit = {
     connect, start, disconnect,
     getStatus() {
-        if (!status || Date.now() - updatedAt > 5000) throw new Error('Waiting for LiveKit worker');
+        if (connectionError) throw new Error(connectionError);
+        if (!room || room.state !== 'connected') throw new Error('Dashboard is not connected to LiveKit');
+        if (!status || Date.now() - updatedAt > 5000) throw new Error('LiveKit connected; waiting for Mac worker');
         return status;
     },
     get captureFps() { return captureFps; },
