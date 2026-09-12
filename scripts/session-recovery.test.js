@@ -19,7 +19,8 @@ function fixture() {
     const context = {
         module: { exports: {} }, Buffer,
         process: { env: { SMARTSPECTRA_API_KEY: 'test-only' } },
-        require: () => ({ SmartSpectraSDK: SDK, cardioMetrics: [1, 2, 3], ProcessingStatus: { kError: 5 } }),
+        require: name => name === './metrics-cache' ? require('../services/metrics-cache')
+            : ({ SmartSpectraSDK: SDK, cardioMetrics: [1, 2, 3], PixelFormat: { kRGBA: 1 }, ProcessingStatus: { kError: 5 } }),
     };
     vm.runInNewContext(fs.readFileSync(require.resolve('../services/smartspectra'), 'utf8'), context);
     return { service: context.module.exports, instances };
@@ -53,4 +54,40 @@ test('destroy runs even if native stop fails', async () => {
     await assert.rejects(service.stopSmartSpectraSession(), /stop failed/);
     assert.equal(instances[0].destroyed, true);
     assert.equal(service.getSdkStatus().sessionActive, false);
+});
+
+test('custom input normalizes same-aspect size changes before native processing', async () => {
+    const { service, instances } = fixture();
+    await service.startSmartSpectraSession({ source: 'custom' });
+    const sentFrames = [];
+    instances[0].sendFrame = (_buffer, width, height, stride) => {
+        sentFrames.push({ width, height, stride });
+        return true;
+    };
+    const rgba = Buffer.alloc(2 * 1 * 4);
+    assert.equal(service.sendCustomFrame({ width: 2, height: 1, timestampUs: 1000, rgba }).accepted, true);
+    assert.equal(service.sendCustomFrame({
+        width: 4,
+        height: 2,
+        timestampUs: 2000,
+        rgba: Buffer.alloc(4 * 2 * 4),
+    }).accepted, true);
+    assert.deepEqual(sentFrames, [
+        { width: 2, height: 1, stride: 8 },
+        { width: 2, height: 1, stride: 8 },
+    ]);
+});
+
+test('custom input rejects aspect changes before native processing', async () => {
+    const { service, instances } = fixture();
+    await service.startSmartSpectraSession({ source: 'custom' });
+    instances[0].sendFrame = () => true;
+    const rgba = Buffer.alloc(2 * 1 * 4);
+    assert.equal(service.sendCustomFrame({ width: 2, height: 1, timestampUs: 1000, rgba }).accepted, true);
+    assert.throws(() => service.sendCustomFrame({
+        width: 2,
+        height: 3,
+        timestampUs: 2000,
+        rgba: Buffer.alloc(2 * 3 * 4),
+    }), /Camera aspect changed from 2x1 to 2x3/);
 });

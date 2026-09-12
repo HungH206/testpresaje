@@ -28,16 +28,17 @@
             <div class="livekit-settings">
                 <label for="livekitCode">Test access code</label>
                 <input id="livekitCode" type="password" autocomplete="off">
+                <span id="connectionState" role="status">Not connected</span>
                 <span id="livekitRates" role="status">Capture -- fps / Received -- fps / Accepted -- fps</span>
             </div>
             <div class="camera-tabs" role="tablist" aria-label="Camera source">
-                <button id="macCameraTab" type="button" role="tab" aria-selected="true" aria-controls="localCameraPanel">Use Mac Camera</button>
-                <button id="phoneCameraTab" type="button" role="tab" aria-selected="false" aria-controls="phoneCameraPanel" tabindex="-1">Use Phone Camera</button>
+                <button id="macCameraTab" type="button" role="tab" aria-selected="true" aria-controls="localCameraPanel">Use This Camera</button>
+                <button id="phoneCameraTab" type="button" role="tab" aria-selected="false" aria-controls="phoneCameraPanel" tabindex="-1">Phone Dashboard</button>
             </div>
             <div id="phoneCameraPanel" role="tabpanel" aria-labelledby="phoneCameraTab" hidden>
-                <label for="phoneAddress">Deployed website address</label>
-                <input id="phoneAddress" type="url" placeholder="https://your-app.vercel.app" autocomplete="off">
                 <a id="phoneScanLink" hidden target="_blank" rel="noopener">Open phone scanner</a>
+                <button id="copyPhoneLink" type="button" hidden>Copy Phone Link</button>
+                <p id="phoneLinkStatus">Phone link available on your HTTPS deployment</p>
                 <button id="connectDashboard" type="button">Connect Dashboard</button>
                 <p id="phoneConnection" role="status">Waiting for phone</p>
             </div>
@@ -58,6 +59,16 @@
         </section>
 
         <section class="readouts" aria-label="Current scan results">
+            <article class="metric">
+                <span>Breathing</span>
+                <strong><span id="breathingValue">--</span> breaths/min</strong>
+                <small id="breathingText">Waiting for breathing measurements</small>
+            </article>
+            <article class="metric">
+                <span>Face analysis</span>
+                <strong id="faceValue">--</strong>
+                <small id="faceText">Waiting for face measurements</small>
+            </article>
             <article class="metric primary">
                 <span>Pulse</span>
                 <strong><span id="pulseValue">--</span> bpm</strong>
@@ -113,11 +124,6 @@
                     <dd id="modePackets">0</dd>
                 </div>
             </dl>
-            <div class="mode-links">
-                <a id="modeLocalLink" href="/?camera=server">Mac camera</a>
-                <a id="modeBridgeLink" href="/">Device camera</a>
-                <a id="modeIphoneLink" href="/?capture=phone">Phone scanner</a>
-            </div>
         </section>
 
         <section class="chart-section" aria-label="Pulse signal chart">
@@ -151,7 +157,7 @@
             <div id="historyList" class="history-list"></div>
         </section>
 
-        <section class="insights" aria-label="AI insights">
+        <section class="insights" aria-label="AI insights" hidden>
             <div class="section-heading">
                 <h2>AI Insight</h2>
                 <span id="insightStatus">SmartSpectra optional</span>
@@ -172,6 +178,6 @@
     </main>
 
     <script src="./livekit.bundle.js"></script>
-    <script src="./renderer.js?v=20260912-livekit"></script>
+    <script src="./renderer.js?v=20260912-browser-scan"></script>
 </body>
 </html>

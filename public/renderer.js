@@ -37,9 +37,6 @@ const els = {
     modeCamera: $('modeCamera'),
     modeMetrics: $('modeMetrics'),
     modePackets: $('modePackets'),
-    modeLocalLink: $('modeLocalLink'),
-    modeBridgeLink: $('modeBridgeLink'),
-    modeIphoneLink: $('modeIphoneLink'),
 };
 
 const scan = {
@@ -58,9 +55,10 @@ const scan = {
 
 const historyKey = 'vitalscan-history';
 const maxSamples = 900;
+const hrvWindowSeconds = 60;
 const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 const query = new URLSearchParams(window.location.search);
-const useBrowserFrameBridge = !(isLocalHost && query.get('camera') === 'server');
+const useBrowserFrameBridge = true;
 const phoneCapture = query.get('capture') === 'phone';
 let watchingPhone = false;
 let latestStatus = null;
@@ -70,14 +68,6 @@ let frameHeight = Math.max(120, Math.min(480, Number(query.get('h') || 270)));
 
 els.canvas.width = frameWidth;
 els.canvas.height = frameHeight;
-
-function setModeLinks() {
-    const base = `${window.location.origin}${window.location.pathname}`;
-    els.modeLocalLink.href = `${base}?camera=server`;
-    els.modeLocalLink.hidden = !isLocalHost;
-    els.modeBridgeLink.href = base;
-    els.modeIphoneLink.href = `${base}?capture=phone`;
-}
 
 function describePipeline(status = {}) {
     if (!status.nativeSessionEnabled) return 'Hosted UI only';
@@ -97,7 +87,7 @@ function renderRunMode(status = {}) {
         ? '1280x720 at 30fps'
         : (status.lastFrame ? `${status.lastFrame.width}x${status.lastFrame.height}` : 'LiveKit video, 30fps requested');
     els.modeMetrics.textContent = status.requestedMetricCount
-        ? `${status.requestedMetricCount} cardio metrics`
+        ? `${status.requestedMetricCount} ${status.requestedBundles?.join(', ') || 'cardio'} metrics`
         : '--';
     els.modePackets.textContent = String(status.metricsPacketCount || 0);
 }
@@ -121,10 +111,32 @@ function resetScan() {
     els.hrvDetail.textContent = '--';
     els.quality.textContent = '--';
     els.confidence.textContent = 'Checking camera environment';
-    els.timer.textContent = '0';
+    renderScanTime(0);
     els.sampleCount.textContent = '0 frames';
     els.save.disabled = true;
     drawChart();
+}
+
+function elapsedScanSeconds() {
+    if (!scan.startedAt) return 0;
+    return Math.max(0, Math.floor((performance.now() - scan.startedAt) / 1000));
+}
+
+function renderScanTime(seconds) {
+    els.timer.textContent = `${Math.min(seconds, hrvWindowSeconds)}/${hrvWindowSeconds}`;
+}
+
+function hasHrvSample(status = latestStatus) {
+    const hrv = status?.latestVitals?.hrv;
+    return Boolean(hrv?.confidence > 0 && Number.isFinite(hrv.rmssd));
+}
+
+function canSaveReading() {
+    return Boolean(scan.pulse && (elapsedScanSeconds() >= hrvWindowSeconds || hasHrvSample()));
+}
+
+function updateSaveState() {
+    els.save.disabled = !canSaveReading();
 }
 
 async function startCamera() {
@@ -353,6 +365,10 @@ async function pollSdkStatus() {
             status = window.vitalLivekit.getStatus();
             const transport = status.transport || {};
             $('livekitRates').textContent = `Capture ${transport.captureFps == null ? '--' : transport.captureFps.toFixed(1)} fps / Received ${(transport.receivedFps || 0).toFixed(1)} fps / Accepted ${(transport.acceptedFps || 0).toFixed(1)} fps`;
+            $('connectionState').textContent = !status.worker?.ready ? 'Worker configuration incomplete'
+                : transport.phase === 'warming' ? 'Camera connected; stabilizing video'
+                    : status.sessionActive ? 'Measuring' : 'Worker ready; waiting for camera';
+            clearReadouts();
             if (transport.error) {
                 els.confidence.textContent = transport.error;
                 $('phoneConnection').textContent = transport.error;
@@ -379,21 +395,32 @@ async function pollSdkStatus() {
             return;
         }
         if (watchingPhone) {
-            const connected = status.sessionActive && status.activeSource === 'custom';
+            const connected = Boolean(status.transport?.publisherIdentity);
             $('phoneConnection').textContent = !status.nativeSessionEnabled
                 ? 'Processing backend unavailable'
                 : (connected ? 'Camera connected' : 'Waiting for phone');
             setStatus(connected ? 'Receiving' : 'Waiting', connected ? 'running' : 'ready');
         }
         const vitals = status.latestVitals || {};
+        $('breathingValue').textContent = Number.isFinite(vitals.breathingRate) && vitals.breathingConfidence > 0 ? String(Math.round(vitals.breathingRate)) : '--';
+        $('breathingText').textContent = Number.isFinite(vitals.breathingConfidence)
+            ? `Confidence ${Math.round(vitals.breathingConfidence)}%`
+            : 'No current breathing sample';
+        $('faceValue').textContent = vitals.faceExpression || '--';
+        $('faceText').textContent = [
+            Number.isFinite(vitals.faceExpressionConfidence) ? `Confidence ${Math.round(vitals.faceExpressionConfidence)}%` : '',
+            typeof vitals.blinking === 'boolean' ? `Blink ${vitals.blinking ? 'detected' : 'not detected'}` : '',
+            typeof vitals.talking === 'boolean' ? `Talking ${vitals.talking ? 'detected' : 'not detected'}` : '',
+            Number.isFinite(vitals.faceLandmarkCount) ? `${vitals.faceLandmarkCount} landmarks` : '',
+        ].filter(Boolean).join(' | ') || 'No current face sample';
         const pulseRate = vitals.pulseRate;
         scan.nativeSessionEnabled = Boolean(status.nativeSessionEnabled);
         renderRunMode(status);
 
-        if (typeof pulseRate === 'number') {
+        if (Number.isFinite(pulseRate) && vitals.pulseConfidence > 0) {
             scan.pulse = Math.round(pulseRate);
             els.pulse.textContent = String(scan.pulse);
-            els.save.disabled = false;
+            updateSaveState();
         }
 
         if (typeof vitals.arterialPressureTrace === 'number') {
@@ -403,16 +430,17 @@ async function pollSdkStatus() {
                 : `Confidence ${Math.round(vitals.arterialPressureConfidence)}%`;
         }
 
-        if (vitals.hrv) {
+        if (vitals.hrv?.confidence > 0 && Number.isFinite(vitals.hrv.rmssd)) {
             els.hrv.textContent = String(Math.round(vitals.hrv.rmssd));
             els.hrvText.textContent = vitals.hrv.stable
                 ? `Stable, confidence ${Math.round(vitals.hrv.confidence)}%`
                 : `Collecting, confidence ${Math.round(vitals.hrv.confidence)}%`;
             els.hrvDetail.textContent = `${Math.round(vitals.hrv.meanNn)} / ${Math.round(vitals.hrv.sdnn)}`;
             els.hrvDetailText.textContent = `Mean NN / SDNN ms, Baevsky ${Math.round(vitals.hrv.baevsky)}`;
+            updateSaveState();
         }
 
-        if (Array.isArray(status.arterialPressureSeries) && status.arterialPressureSeries.length > 1) {
+        if (Number.isFinite(vitals.arterialPressureTrace) && Array.isArray(status.arterialPressureSeries) && status.arterialPressureSeries.length > 1) {
             drawChart(status.arterialPressureSeries);
         }
 
@@ -420,7 +448,10 @@ async function pollSdkStatus() {
             els.sampleCount.textContent = `${status.metricsPacketCount || 0} metric packets`;
             if (status.sessionStartedAt) {
                 const elapsed = (Date.now() - new Date(status.sessionStartedAt).getTime()) / 1000;
-                if (Number.isFinite(elapsed)) els.timer.textContent = String(Math.max(0, Math.floor(elapsed)));
+                if (Number.isFinite(elapsed)) {
+                    renderScanTime(Math.max(0, Math.floor(elapsed)));
+                    updateSaveState();
+                }
             }
         }
 
@@ -439,6 +470,8 @@ async function pollSdkStatus() {
         }
     } catch (error) {
         latestStatus = null;
+        clearReadouts();
+        $('connectionState').textContent = error.message || 'Connection lost';
         scan.nativeSessionEnabled = false;
         if (watchingPhone) $('phoneConnection').textContent = error.message || 'Connection lost';
         els.insightStatus.textContent = 'Status unavailable';
@@ -446,6 +479,20 @@ async function pollSdkStatus() {
     } finally {
         statusInFlight = false;
     }
+}
+
+function clearReadouts() {
+    for (const element of [els.pulse, els.pressure, els.hrv, els.hrvDetail, $('breathingValue'), $('faceValue')]) {
+        element.textContent = '--';
+    }
+    els.pressureText.textContent = 'No current waveform';
+    els.hrvText.textContent = 'No current HRV sample';
+    els.hrvDetailText.textContent = 'No current HRV details';
+    $('breathingText').textContent = 'No current breathing sample';
+    $('faceText').textContent = 'No current face sample';
+    els.save.disabled = true;
+    scan.pulse = null;
+    drawChart([]);
 }
 
 async function tick() {
@@ -461,18 +508,19 @@ async function tick() {
     if (frame) {
         scan.samples.push(frame);
         if (scan.samples.length > maxSamples) scan.samples.shift();
-        els.timer.textContent = String(Math.floor(frame.t));
+        renderScanTime(Math.floor(frame.t));
         els.sampleCount.textContent = `${scan.samples.length} frames`;
         renderQuality(frame);
+        updateSaveState();
         if (!scan.sdkStreaming) drawChart();
     }
 
-    if (scan.samples.length % 30 === 0) pollSdkStatus();
-    scan.raf = requestAnimationFrame(tick);
+    scan.raf = setTimeout(tick, 100);
 }
 
 async function startScan() {
     if (watchingPhone) return;
+    if (scan.running || els.start.disabled) return;
     await pollSdkStatus();
     if (latestStatus?.sessionActive && !latestStatus.sessionFailed && !scan.sdkStreaming) {
         els.prompt.textContent = 'Another camera is scanning. Stop that scan before starting this camera.';
@@ -487,6 +535,8 @@ async function startScan() {
     try {
         setStatus('Starting', 'busy');
         els.start.disabled = true;
+        $('macCameraTab').disabled = true;
+        $('phoneCameraTab').disabled = true;
         resetScan();
         if (useBrowserFrameBridge) await startCamera();
         const sdkStarted = await startSdkStream();
@@ -510,6 +560,9 @@ async function startScan() {
         els.stop.disabled = true;
         els.prompt.textContent = error.message || 'Camera permission was blocked.';
         setStatus('Unable to scan', 'error');
+    } finally {
+        $('macCameraTab').disabled = false;
+        $('phoneCameraTab').disabled = false;
     }
 }
 
@@ -628,6 +681,7 @@ window.addEventListener('beforeunload', () => {
     if (useBrowserFrameBridge || watchingPhone) void window.vitalLivekit.disconnect();
     stopCamera();
 });
+window.addEventListener('livekit-state', event => { $('connectionState').textContent = event.detail; });
 window.addEventListener('livekit-lost', async () => {
     await stopScan();
     els.prompt.textContent = 'LiveKit connection lost. Start a new scan.';
@@ -637,7 +691,7 @@ window.addEventListener('livekit-lost', async () => {
 renderHistory();
 function updatePhoneLink() {
     try {
-        const url = new URL($('phoneAddress').value);
+        const url = new URL(window.location.href);
         if (url.protocol !== 'https:' || url.username || url.password) throw new Error('HTTPS required');
         url.pathname = '/';
         url.search = '?capture=phone';
@@ -645,6 +699,8 @@ function updatePhoneLink() {
         $('phoneScanLink').href = url.href;
         $('phoneScanLink').textContent = url.href;
         $('phoneScanLink').hidden = false;
+        $('copyPhoneLink').hidden = false;
+        $('phoneLinkStatus').textContent = '';
     } catch {
         $('phoneScanLink').hidden = true;
     }
@@ -668,9 +724,13 @@ $('connectDashboard').addEventListener('click', async () => {
     $('connectDashboard').disabled = true;
     try {
         await window.vitalLivekit.connect('dashboard');
-        $('phoneConnection').textContent = 'Connected to LiveKit; waiting for worker';
+        $('phoneConnection').textContent = 'Connected to LiveKit; waiting for measurements';
     } catch (error) { $('phoneConnection').textContent = error.message; }
     finally { $('connectDashboard').disabled = false; }
+});
+$('copyPhoneLink').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('phoneScanLink').href); $('phoneLinkStatus').textContent = 'Phone link copied'; }
+    catch { $('phoneLinkStatus').textContent = 'Copy the phone link above'; }
 });
 for (const id of ['macCameraTab', 'phoneCameraTab']) {
     $(id).addEventListener('keydown', (event) => {
@@ -681,16 +741,13 @@ for (const id of ['macCameraTab', 'phoneCameraTab']) {
         selectCamera(phone);
     });
 }
-$('phoneAddress').value = window.location.protocol === 'https:' ? window.location.origin : '';
-$('phoneAddress').addEventListener('input', updatePhoneLink);
 updatePhoneLink();
 if (phoneCapture) {
     document.querySelector('.camera-tabs').hidden = true;
     $('localCameraPanel').removeAttribute('aria-labelledby');
     $('localCameraPanel').setAttribute('aria-label', 'Phone camera');
 }
-setInterval(() => { if (watchingPhone) pollSdkStatus(); }, 1000);
-setModeLinks();
+setInterval(() => { if (watchingPhone || scan.running) pollSdkStatus(); }, 1000);
 renderRunMode();
 drawChart();
 pollSdkStatus();

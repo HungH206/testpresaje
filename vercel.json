@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "npm run build",
   "headers": [
     {
       "source": "/(.*)",
@@ -15,7 +16,7 @@
       ]
     },
     {
-      "source": "/(styles.css|renderer.js|manifest.webmanifest|icons/icon.svg)",
+      "source": "/(styles.css|renderer.js|livekit.bundle.js|manifest.webmanifest|icons/icon.svg)",
       "headers": [
         {
           "key": "Cache-Control",

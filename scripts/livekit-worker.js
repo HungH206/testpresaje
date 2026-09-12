@@ -3,6 +3,7 @@ require('dotenv').config();
 const { tokenFor } = require('../services/livekit-config');
 const sdk = require('../services/smartspectra');
 const { orientFrame } = require('../services/video-frame');
+const { FrameCadence } = require('../services/frame-cadence');
 
 async function main() {
     const { Room, RoomEvent, VideoStream, VideoBufferType, RemoteVideoTrack, dispose } = await import('@livekit/rtc-node');
@@ -22,13 +23,19 @@ async function main() {
     let captureUpdatedAt = 0;
 
     async function consume(track, participant) {
-        if (active || !(track instanceof RemoteVideoTrack) || !participant.identity.startsWith('publisher-')) return;
-        const state = { reader: new VideoStream(track).getReader(), track, identity: participant.identity, stopping: false, lastFrameAt: Date.now() };
+        if (!(track instanceof RemoteVideoTrack) || !participant.identity.startsWith('publisher-')) return;
+        if (active) {
+            await room.localParticipant.publishData(Buffer.from(JSON.stringify({ message: 'Another camera is scanning. Stop it first.' })),
+                { reliable: true, topic: 'scan-error', destination_identities: [participant.identity] });
+            return;
+        }
+        const state = { reader: new VideoStream(track).getReader(), track, identity: participant.identity, stopping: false,
+            lastFrameAt: Date.now(), createdAt: Date.now(), phase: 'warming' };
         active = state;
         error = null;
         received = accepted = receivedFps = acceptedFps = 0;
         windowStart = performance.now();
-        let previous = null;
+        const cadence = new FrameCadence();
         let started = false;
         try {
             while (!state.stopping) {
@@ -36,13 +43,16 @@ async function main() {
                 if (done || state.stopping) break;
                 state.lastFrameAt = Date.now();
                 const timestampUs = Number(value.timestampUs);
-                if (!Number.isSafeInteger(timestampUs) || timestampUs <= 0) throw new Error('Invalid media timestamp');
-                if (previous !== null && timestampUs <= previous) continue;
-                previous = timestampUs;
+                if (!cadence.add(timestampUs, performance.now())) continue;
                 received++;
                 if (!started) {
+                    if (!cadence.ready) {
+                        if (Date.now() - state.createdAt > 20000) throw new Error('Video is below 25 fps or unstable. Use a stronger connection and keep Safari visible.');
+                        continue;
+                    }
                     await sdk.startSmartSpectraSession({ source: 'custom' });
                     started = true;
+                    state.phase = 'measuring';
                 }
                 const frame = value.frame.convert(VideoBufferType.RGBA);
                 const result = sdk.sendCustomFrame({ ...orientFrame(frame, value.rotation), timestampUs });
@@ -57,7 +67,9 @@ async function main() {
             active = null;
         }
     }
-    room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => { void consume(track, participant); });
+    room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
+        void consume(track, participant).catch(cause => { error = cause.message; });
+    });
     room.on(RoomEvent.TrackUnsubscribed, track => {
         if (active?.track === track) {
             active.stopping = true;
@@ -76,12 +88,6 @@ async function main() {
         } catch { /* Ignore malformed telemetry. */ }
     });
     await room.connect(credentials.url, credentials.token, { autoSubscribe: true });
-    room.localParticipant.registerRpcMethod('ready', async () => {
-        const status = sdk.getSdkStatus();
-        if (active) throw new Error('Another camera is scanning');
-        if (!status.available || !status.hasApiKey) throw new Error('SmartSpectra is not configured on the worker');
-        return 'ready';
-    });
     interval = setInterval(async () => {
         if (active && Date.now() - active.lastFrameAt > 5000) {
             error = 'Camera frames stopped arriving. Start a new scan.';
@@ -98,10 +104,19 @@ async function main() {
         publishing = true;
         try {
             const status = sdk.getSdkStatus();
+            status.worker = { ready: status.available && status.hasApiKey };
+            if (active?.phase === 'warming') {
+                status.latestVitals = null;
+                status.arterialPressureSeries = [];
+                status.lastError = null;
+                status.sessionFailed = false;
+                status.validationStatus = { hint: 'Checking video frame rate' };
+            }
             // Keep the data packet below LiveKit's reliable message size limit.
             status.arterialPressureSeries = status.arterialPressureSeries.slice(-80);
             status.lastInsight = null;
-            status.transport = { captureFps: Date.now() - captureUpdatedAt < 5000 ? captureFps : null,
+            status.transport = { publisherIdentity: active?.identity || null, phase: active?.phase || (error ? 'error' : 'idle'),
+                captureFps: Date.now() - captureUpdatedAt < 5000 ? captureFps : null,
                 receivedFps, acceptedFps, error, timestampSource: 'LiveKit decoded media' };
             await room.localParticipant.publishData(Buffer.from(JSON.stringify(status)), { reliable: true, topic: 'vitals' });
         } catch (cause) { console.error('Status delivery:', cause.message); }

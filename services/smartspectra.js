@@ -1,6 +1,8 @@
 'use strict';
 
 const placeholderKey = 'replace_with_your_test_key';
+const { MetricsCache } = require('./metrics-cache');
+const metricsCache = new MetricsCache();
 let activeSession = null;
 let activeSessionStartedAt = null;
 let activeSource = null;
@@ -14,6 +16,7 @@ let lastError = null;
 let stoppingSession = null;
 let metricsPacketCount = 0;
 let arterialPressureSeries = [];
+let customFrameShape = null;
 const maxSeriesPoints = 600;
 
 function getApiKey() {
@@ -53,6 +56,8 @@ function getRequestedMetrics() {
     const sdk = loadSdkExports();
     return [
         ...(sdk.cardioMetrics || []),
+        ...(sdk.breathingMetrics || []),
+        ...(sdk.faceMetrics || []),
     ];
 }
 
@@ -66,7 +71,7 @@ function getSdkStatus() {
         nativeSessionEnabled: process.env.VERCEL !== '1' || process.env.SMARTSPECTRA_NATIVE_ENABLED === '1',
         version: sdk.SmartSpectraSDK?.version || null,
         hasApiKey: hasConfiguredApiKey(),
-        requestedBundles: ['cardio'],
+        requestedBundles: ['cardio', 'breathing', 'face'],
         requestedMetricCount: requestedMetrics.length,
         insightSupport: Boolean(sdk.SmartSpectraSDK),
         sessionActive: Boolean(activeSession),
@@ -75,7 +80,7 @@ function getSdkStatus() {
         processingStatus,
         sessionFailed: processingStatus === sdk.ProcessingStatus?.kError || Boolean(lastError && !lastError.retryable),
         validationStatus,
-        latestVitals,
+        latestVitals: activeSession ? metricsCache.snapshot() : null,
         metricsPacketCount,
         arterialPressureSeries,
         lastMetricsAt,
@@ -159,12 +164,14 @@ async function startSmartSpectraSession(options = {}) {
     processingStatus = null;
     validationStatus = null;
     latestVitals = null;
+    metricsCache.clear();
     lastMetricsAt = null;
     metricsPacketCount = 0;
     arterialPressureSeries = [];
     lastInsight = null;
     lastError = null;
     lastFrame = null;
+    customFrameShape = null;
 
     session.on('insight', (buffer, requestId) => {
         lastInsight = {
@@ -185,6 +192,7 @@ async function startSmartSpectraSession(options = {}) {
         appendArterialPressure(vitals?.arterialPressureTraceSamples);
         if (vitals) delete vitals.arterialPressureTraceSamples;
         latestVitals = vitals;
+        metricsCache.update(vitals);
         lastMetricsAt = {
             timestampUs,
             receivedAt: new Date().toISOString(),
@@ -231,6 +239,9 @@ async function stopSmartSpectraSession() {
     activeSession = null;
     activeSessionStartedAt = null;
     activeSource = null;
+    metricsCache.clear();
+    arterialPressureSeries = [];
+    customFrameShape = null;
 
     stoppingSession = (async () => {
         try {
@@ -293,6 +304,50 @@ function appendArterialPressure(samples = []) {
     }
 }
 
+function hasSameAspectRatio(a, b) {
+    return Math.abs((a.width / a.height) - (b.width / b.height)) < 0.01;
+}
+
+function resizeRgbaNearest(source, sourceWidth, sourceHeight, targetWidth, targetHeight) {
+    const output = Buffer.alloc(targetWidth * targetHeight * 4);
+    for (let y = 0; y < targetHeight; y++) {
+        const sourceY = Math.min(sourceHeight - 1, Math.floor(y * sourceHeight / targetHeight));
+        for (let x = 0; x < targetWidth; x++) {
+            const sourceX = Math.min(sourceWidth - 1, Math.floor(x * sourceWidth / targetWidth));
+            const sourceOffset = (sourceY * sourceWidth + sourceX) * 4;
+            const targetOffset = (y * targetWidth + x) * 4;
+            output[targetOffset] = source[sourceOffset];
+            output[targetOffset + 1] = source[sourceOffset + 1];
+            output[targetOffset + 2] = source[sourceOffset + 2];
+            output[targetOffset + 3] = source[sourceOffset + 3];
+        }
+    }
+    return output;
+}
+
+function normalizeCustomFrameBuffer(buffer, width, height) {
+    if (!customFrameShape) {
+        customFrameShape = { width, height };
+        return { buffer, width, height };
+    }
+
+    if (customFrameShape.width === width && customFrameShape.height === height) {
+        return { buffer, width, height };
+    }
+
+    if (!hasSameAspectRatio(customFrameShape, { width, height })) {
+        const error = new Error(`Camera aspect changed from ${customFrameShape.width}x${customFrameShape.height} to ${width}x${height}. Start a new scan with the camera orientation fixed.`);
+        error.statusCode = 409;
+        throw error;
+    }
+
+    return {
+        buffer: resizeRgbaNearest(buffer, width, height, customFrameShape.width, customFrameShape.height),
+        width: customFrameShape.width,
+        height: customFrameShape.height,
+    };
+}
+
 function sanitizeHrv(hrv) {
     if (!hrv) return null;
 
@@ -334,7 +389,7 @@ function sendCustomFrame(frame) {
         throw error;
     }
 
-    const buffer = frame.rgba ? Buffer.from(frame.rgba) : Buffer.from(frame.rgbaBase64, 'base64');
+    let buffer = frame.rgba ? Buffer.from(frame.rgba) : Buffer.from(frame.rgbaBase64, 'base64');
     const stride = width * 4;
     const expectedBytes = stride * height;
 
@@ -344,19 +399,25 @@ function sendCustomFrame(frame) {
         throw error;
     }
 
+    const normalized = normalizeCustomFrameBuffer(buffer, width, height);
+    buffer = normalized.buffer;
+    const normalizedWidth = normalized.width;
+    const normalizedHeight = normalized.height;
+    const normalizedStride = normalizedWidth * 4;
+
     const sent = activeSession.sendFrame(
         buffer,
-        width,
-        height,
-        stride,
+        normalizedWidth,
+        normalizedHeight,
+        normalizedStride,
         sdk.PixelFormat.kRGBA,
         timestampUs,
     );
 
     lastFrame = {
-        width,
-        height,
-        stride,
+        width: normalizedWidth,
+        height: normalizedHeight,
+        stride: normalizedStride,
         sent: Boolean(sent),
         timestampUs,
         receivedAt: new Date().toISOString(),
@@ -375,7 +436,16 @@ function readLatestVitals(buffer) {
     const metrics = sdk.decodeMetrics(buffer);
     if (Buffer.isBuffer(metrics)) return null;
 
+    const expression = metrics.face?.expression?.at(-1)?.scores?.reduce((best, score) => !best || score.confidence > best.confidence ? score : best, null);
+    const expressionNames = ['Unspecified', 'Angry', 'Contempt', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise'];
     return {
+        breathingRate: metrics.breathing?.rate?.at(-1)?.value ?? null,
+        breathingConfidence: metrics.breathing?.rate?.at(-1)?.confidence ?? null,
+        faceExpression: expression ? (expressionNames[expression.type] || 'Unknown') : null,
+        faceExpressionConfidence: expression?.confidence ?? null,
+        faceLandmarkCount: metrics.face?.landmarks?.at(-1)?.value?.length ?? null,
+        blinking: metrics.face?.blinking?.at(-1)?.detected ?? null,
+        talking: metrics.face?.talking?.at(-1)?.detected ?? null,
         pulseRate: metrics.cardio?.pulseRate?.at(-1)?.value ?? null,
         pulseConfidence: metrics.cardio?.pulseRate?.at(-1)?.confidence ?? null,
         arterialPressureTrace: metrics.cardio?.arterialPressureTrace?.at(-1)?.value ?? null,
