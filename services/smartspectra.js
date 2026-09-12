@@ -11,6 +11,8 @@ let lastMetricsAt = null;
 let lastFrame = null;
 let lastInsight = null;
 let lastError = null;
+let arterialPressureSeries = [];
+const maxSeriesPoints = 600;
 
 function getApiKey() {
     return process.env.SMARTSPECTRA_API_KEY || process.env.VITALSCAN_API_KEY || '';
@@ -28,7 +30,6 @@ function loadSdkExports() {
             SmartSpectraSDK: null,
             breathingMetrics: [],
             cardioMetrics: [],
-            faceMetrics: [],
             decodeMetrics: null,
         };
     }
@@ -41,7 +42,6 @@ function loadSdkExports() {
             SmartSpectraSDK: null,
             breathingMetrics: [],
             cardioMetrics: [],
-            faceMetrics: [],
             decodeMetrics: null,
         };
     }
@@ -50,9 +50,7 @@ function loadSdkExports() {
 function getRequestedMetrics() {
     const sdk = loadSdkExports();
     return [
-        ...(sdk.breathingMetrics || []),
         ...(sdk.cardioMetrics || []),
-        ...(sdk.faceMetrics || []),
     ];
 }
 
@@ -66,7 +64,7 @@ function getSdkStatus() {
         nativeSessionEnabled: process.env.VERCEL !== '1' || process.env.SMARTSPECTRA_NATIVE_ENABLED === '1',
         version: sdk.SmartSpectraSDK?.version || null,
         hasApiKey: hasConfiguredApiKey(),
-        requestedBundles: ['breathing', 'cardio', 'face'],
+        requestedBundles: ['cardio'],
         requestedMetricCount: requestedMetrics.length,
         insightSupport: Boolean(sdk.SmartSpectraSDK),
         sessionActive: Boolean(activeSession),
@@ -75,6 +73,7 @@ function getSdkStatus() {
         processingStatus,
         validationStatus,
         latestVitals,
+        arterialPressureSeries,
         lastMetricsAt,
         lastFrame,
         lastInsight,
@@ -149,6 +148,9 @@ async function startSmartSpectraSession(options = {}) {
 
     processingStatus = null;
     validationStatus = null;
+    latestVitals = null;
+    lastMetricsAt = null;
+    arterialPressureSeries = [];
     lastInsight = null;
     lastError = null;
 
@@ -166,7 +168,10 @@ async function startSmartSpectraSession(options = {}) {
     });
 
     session.on('metrics', (buffer, timestampUs) => {
-        latestVitals = readLatestVitals(buffer);
+        const vitals = readLatestVitals(buffer);
+        appendArterialPressure(vitals?.arterialPressureTraceSamples);
+        if (vitals) delete vitals.arterialPressureTraceSamples;
+        latestVitals = vitals;
         lastMetricsAt = {
             timestampUs,
             receivedAt: new Date().toISOString(),
@@ -227,7 +232,7 @@ async function stopSmartSpectraSession() {
 
 function requestInsight(prompt) {
     if (!activeSession) {
-        const error = new Error('Start a SmartSpectra session and collect valid breathing/cardio metrics before requesting an insight.');
+        const error = new Error('Start a SmartSpectra session and collect valid cardio metrics before requesting an insight.');
         error.statusCode = 409;
         throw error;
     }
@@ -243,6 +248,44 @@ function requestInsight(prompt) {
         requestId,
         prompt,
         requestedAt: new Date().toISOString(),
+    };
+}
+
+function toNumber(value) {
+    if (value == null) return null;
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    if (typeof value.toNumber === 'function') return value.toNumber();
+    return Number(value);
+}
+
+function appendArterialPressure(samples = []) {
+    if (!Array.isArray(samples) || samples.length === 0) return;
+
+    for (const sample of samples) {
+        arterialPressureSeries.push({
+            t: toNumber(sample.timestamp),
+            value: sample.value,
+            confidence: sample.confidence ?? null,
+        });
+    }
+
+    if (arterialPressureSeries.length > maxSeriesPoints) {
+        arterialPressureSeries = arterialPressureSeries.slice(-maxSeriesPoints);
+    }
+}
+
+function sanitizeHrv(hrv) {
+    if (!hrv) return null;
+
+    return {
+        rmssd: hrv.rmssd ?? null,
+        meanNn: hrv.meanNn ?? null,
+        sdnn: hrv.sdnn ?? null,
+        baevsky: hrv.baevsky ?? null,
+        timestamp: toNumber(hrv.timestamp),
+        confidence: hrv.confidence ?? null,
+        stable: Boolean(hrv.stable),
     };
 }
 
@@ -310,21 +353,12 @@ function readLatestVitals(buffer) {
     if (Buffer.isBuffer(metrics)) return null;
 
     return {
-        breathingRate: metrics.breathing?.rate?.at(-1)?.value ?? null,
-        breathingConfidence: metrics.breathing?.rate?.at(-1)?.confidence ?? null,
-        chestTrace: metrics.breathing?.upperTrace?.at(-1)?.value ?? null,
-        abdomenTrace: metrics.breathing?.lowerTrace?.at(-1)?.value ?? null,
         pulseRate: metrics.cardio?.pulseRate?.at(-1)?.value ?? null,
         pulseConfidence: metrics.cardio?.pulseRate?.at(-1)?.confidence ?? null,
         arterialPressureTrace: metrics.cardio?.arterialPressureTrace?.at(-1)?.value ?? null,
-        hrv: metrics.cardio?.hrv?.at(-1) ?? null,
-        face: {
-            landmarks: metrics.face?.landmarks?.at(-1)?.value ?? null,
-            landmarksCount: metrics.face?.landmarks?.at(-1)?.value?.length ?? 0,
-            blinking: metrics.face?.blinking?.at(-1)?.detected ?? null,
-            talking: metrics.face?.talking?.at(-1)?.detected ?? null,
-            expression: metrics.face?.expression?.at(-1) ?? null,
-        },
+        arterialPressureConfidence: metrics.cardio?.arterialPressureTrace?.at(-1)?.confidence ?? null,
+        arterialPressureTraceSamples: metrics.cardio?.arterialPressureTrace || [],
+        hrv: sanitizeHrv(metrics.cardio?.hrv?.at(-1)),
     };
 }
 

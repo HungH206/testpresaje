@@ -15,12 +15,12 @@ const els = {
     confidence: $('confidenceText'),
     quality: $('qualityValue'),
     timer: $('timerValue'),
-    breathing: $('breathingValue'),
-    breathingText: $('breathingText'),
+    pressure: $('pressureValue'),
+    pressureText: $('pressureText'),
     hrv: $('hrvValue'),
     hrvText: $('hrvText'),
-    face: $('faceValue'),
-    faceText: $('faceText'),
+    hrvDetail: $('hrvDetailValue'),
+    hrvDetailText: $('hrvDetailText'),
     sampleCount: $('sampleCount'),
     form: $('manualForm'),
     spo2: $('spo2Input'),
@@ -70,9 +70,9 @@ function resetScan() {
     scan.lastFrameSentAt = 0;
     scan.lastPixels = null;
     els.pulse.textContent = '--';
-    els.breathing.textContent = '--';
+    els.pressure.textContent = '--';
     els.hrv.textContent = '--';
-    els.face.textContent = '--';
+    els.hrvDetail.textContent = '--';
     els.quality.textContent = '--';
     els.confidence.textContent = 'Checking camera environment';
     els.timer.textContent = '0';
@@ -260,7 +260,21 @@ function renderQuality(frame) {
     els.quality.dataset.quality = label.toLowerCase();
 }
 
-function drawChart() {
+function normalizePoints(points) {
+    if (points.length < 2) return [];
+
+    const values = points.map((point) => point.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+
+    return points.map((point, index) => ({
+        x: index / (points.length - 1),
+        y: 1 - (point.value - min) / range,
+    }));
+}
+
+function drawChart(series = null) {
     const canvas = els.chart;
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
@@ -286,15 +300,21 @@ function drawChart() {
         ctx.stroke();
     }
 
-    const samples = scan.samples.slice(-240);
-    if (samples.length < 2) return;
+    const points = Array.isArray(series) && series.length > 1
+        ? normalizePoints(series.slice(-240))
+        : scan.samples.slice(-240).map((sample, index, samples) => ({
+            x: samples.length <= 1 ? 0 : index / (samples.length - 1),
+            y: 1 - sample.quality / 100,
+        }));
+
+    if (points.length < 2) return;
 
     ctx.strokeStyle = '#2dd4bf';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    samples.forEach((sample, index) => {
-        const x = (index / (samples.length - 1)) * width;
-        const y = height - (sample.quality / 100) * height;
+    points.forEach((point, index) => {
+        const x = point.x * width;
+        const y = point.y * height;
         if (index === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
@@ -321,11 +341,11 @@ async function pollSdkStatus() {
             els.save.disabled = false;
         }
 
-        if (typeof vitals.breathingRate === 'number') {
-            els.breathing.textContent = String(Math.round(vitals.breathingRate));
-            els.breathingText.textContent = vitals.breathingConfidence == null
-                ? 'Breathing metric active'
-                : `Confidence ${Math.round(vitals.breathingConfidence)}%`;
+        if (typeof vitals.arterialPressureTrace === 'number') {
+            els.pressure.textContent = 'Active';
+            els.pressureText.textContent = vitals.arterialPressureConfidence == null
+                ? 'Waveform samples received'
+                : `Confidence ${Math.round(vitals.arterialPressureConfidence)}%`;
         }
 
         if (vitals.hrv) {
@@ -333,17 +353,12 @@ async function pollSdkStatus() {
             els.hrvText.textContent = vitals.hrv.stable
                 ? `Stable, confidence ${Math.round(vitals.hrv.confidence)}%`
                 : `Collecting, confidence ${Math.round(vitals.hrv.confidence)}%`;
+            els.hrvDetail.textContent = `${Math.round(vitals.hrv.meanNn)} / ${Math.round(vitals.hrv.sdnn)}`;
+            els.hrvDetailText.textContent = `Mean NN / SDNN ms, Baevsky ${Math.round(vitals.hrv.baevsky)}`;
         }
 
-        if (vitals.face) {
-            const faceSignals = [];
-            if (vitals.face.landmarksCount) faceSignals.push(`${vitals.face.landmarksCount} landmarks`);
-            if (typeof vitals.face.blinking === 'boolean') faceSignals.push(vitals.face.blinking ? 'blink' : 'eyes open');
-            if (typeof vitals.face.talking === 'boolean') faceSignals.push(vitals.face.talking ? 'talking' : 'quiet');
-            els.face.textContent = faceSignals.length ? 'Active' : '--';
-            els.faceText.textContent = faceSignals.length
-                ? faceSignals.join(', ')
-                : 'Waiting for face metrics';
+        if (Array.isArray(status.arterialPressureSeries) && status.arterialPressureSeries.length > 1) {
+            drawChart(status.arterialPressureSeries);
         }
 
         if (status.validationStatus?.hint) {

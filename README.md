@@ -43,13 +43,13 @@ const app = createApp();
 
 ## SmartSpectra Metrics
 
-The server configures SmartSpectra with the breathing, cardio, and face bundles:
+This prototype focuses on SmartSpectra cardio metrics:
 
 ```js
-requestedMetrics: [...breathingMetrics, ...cardioMetrics, ...faceMetrics]
+requestedMetrics: [...cardioMetrics]
 ```
 
-The status endpoint confirms whether the SDK is available, whether an API key is configured, and how many metric codes are being requested:
+That covers pulse rate, relative arterial pressure waveform, and HRV. The status endpoint confirms whether the SDK is available, whether an API key is configured, and how many metric codes are being requested:
 
 ```bash
 curl http://localhost:3000/api/smartspectra/status
@@ -57,7 +57,7 @@ curl http://localhost:3000/api/smartspectra/status
 
 ## LLM Insights
 
-SmartSpectra LLM Insights require an active SDK session with buffered breathing and cardio metrics. The Express server exposes local session-backed routes:
+SmartSpectra LLM Insights are still wired, but grounded vitals insights may require breathing plus cardio depending on your subscription and prompt. The Express server exposes local session-backed routes:
 
 ```bash
 curl -X POST http://localhost:3000/api/smartspectra/session/start \
@@ -77,7 +77,7 @@ POST /api/smartspectra/frame
 
 This uses `sendFrame(..., PixelFormat.kRGBA, timestampUs)` on the active SDK session. Hosted Vercel/iPhone test mode skips this by default and stays browser-only; add `?native=1` only when the URL points at a persistent Node server that can hold an SDK session.
 
-Breathing rate needs about 30 seconds of stable face/chest video before confidence becomes useful. HRV needs about 60 seconds, and only applies when pulse is in the valid range. Face analysis needs a forward-facing, unobstructed, well-lit face.
+Relative arterial pressure is waveform shape only. It is not systolic or diastolic blood pressure. HRV needs about 60 seconds, and only applies when pulse is in the valid range. Both need a stationary subject, stable camera, face and upper chest visible, and steady lighting.
 
 The on-demand call returns the SmartSpectra `requestId`. Insight responses arrive asynchronously from the SDK `insight` event. The app stores the raw base64 protobuf payload for now; decoding the final `analysis` text needs the Insight protobuf schema from SmartSpectra data types.
 
