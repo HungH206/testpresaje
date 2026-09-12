@@ -44,6 +44,7 @@ const scan = {
     running: false,
     sdkStreaming: false,
     nativeSessionEnabled: false,
+    nativeCameraMode: false,
     lastFrameSentAt: 0,
     lastPixels: null,
 };
@@ -54,7 +55,10 @@ const frameWidth = 320;
 const frameHeight = 240;
 const frameIntervalMs = 180;
 const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-const forceNativeStreaming = new URLSearchParams(window.location.search).get('native') === '1';
+const query = new URLSearchParams(window.location.search);
+const forceNativeStreaming = query.get('native') === '1';
+const forceBrowserBridge = query.get('bridge') === '1';
+const useBrowserFrameBridge = forceBrowserBridge || (!isLocalHost && forceNativeStreaming);
 
 function setStatus(text, state) {
     els.status.textContent = text;
@@ -67,6 +71,7 @@ function resetScan() {
     scan.pulse = null;
     scan.quality = 0;
     scan.sdkStreaming = false;
+    scan.nativeCameraMode = false;
     scan.lastFrameSentAt = 0;
     scan.lastPixels = null;
     els.pulse.textContent = '--';
@@ -169,7 +174,7 @@ async function startSdkStream() {
         scan.nativeSessionEnabled = false;
         scan.sdkStreaming = false;
         els.confidence.textContent = 'Hosted iPhone camera test mode';
-        return;
+        return false;
     }
 
     await pollSdkStatus();
@@ -177,14 +182,22 @@ async function startSdkStream() {
     if (!scan.nativeSessionEnabled) {
         scan.sdkStreaming = false;
         els.confidence.textContent = 'iPhone HTTPS camera test mode';
-        return;
+        return false;
     }
 
     try {
+        const source = useBrowserFrameBridge ? 'custom' : 'camera';
         const response = await fetch('/api/smartspectra/session/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source: 'custom' }),
+            body: JSON.stringify(source === 'camera'
+                ? {
+                    source,
+                    width: 1280,
+                    height: 720,
+                    fps: 30,
+                }
+                : { source }),
         });
         const payload = await response.json();
 
@@ -195,12 +208,15 @@ async function startSdkStream() {
         }
 
         scan.sdkStreaming = Boolean(payload.sessionActive);
+        scan.nativeCameraMode = payload.activeSource === 'camera';
         els.confidence.textContent = scan.sdkStreaming
-            ? 'Streaming whole-camera frames to SmartSpectra'
+            ? (scan.nativeCameraMode ? 'SmartSpectra native camera running' : 'Streaming browser frames to SmartSpectra')
             : 'Local camera quality only';
+        return scan.sdkStreaming;
     } catch {
         scan.sdkStreaming = false;
         els.confidence.textContent = 'Local camera quality only';
+        return false;
     }
 }
 
@@ -214,10 +230,11 @@ async function stopSdkStream() {
     }
 
     scan.sdkStreaming = false;
+    scan.nativeCameraMode = false;
 }
 
 async function sendFrameToSdk(frame) {
-    if (!scan.sdkStreaming) return;
+    if (!scan.sdkStreaming || scan.nativeCameraMode) return;
 
     const now = performance.now();
     if (now - scan.lastFrameSentAt < frameIntervalMs) return;
@@ -237,16 +254,19 @@ async function sendFrameToSdk(frame) {
 
         if (!response.ok) {
             scan.sdkStreaming = false;
+            scan.nativeCameraMode = false;
             return;
         }
 
         const payload = await response.json();
         if (payload.accepted === false || payload.hostedMode) {
             scan.sdkStreaming = false;
+            scan.nativeCameraMode = false;
             els.confidence.textContent = payload.message || 'Hosted iPhone camera test mode';
         }
     } catch {
         scan.sdkStreaming = false;
+        scan.nativeCameraMode = false;
     }
 }
 
@@ -361,6 +381,14 @@ async function pollSdkStatus() {
             drawChart(status.arterialPressureSeries);
         }
 
+        if (status.activeSource === 'camera') {
+            els.sampleCount.textContent = `${status.metricsPacketCount || 0} metric packets`;
+            if (status.sessionStartedAt) {
+                const elapsed = (Date.now() - new Date(status.sessionStartedAt).getTime()) / 1000;
+                if (Number.isFinite(elapsed)) els.timer.textContent = String(Math.max(0, Math.floor(elapsed)));
+            }
+        }
+
         if (status.validationStatus?.hint) {
             els.confidence.textContent = status.validationStatus.hint;
         } else if (status.sessionActive) {
@@ -382,6 +410,12 @@ async function pollSdkStatus() {
 async function tick() {
     if (!scan.running) return;
 
+    if (scan.nativeCameraMode) {
+        await pollSdkStatus();
+        scan.raf = window.setTimeout(tick, 1000);
+        return;
+    }
+
     const frame = readWholeFrame();
     if (frame) {
         scan.samples.push(frame);
@@ -398,7 +432,7 @@ async function tick() {
 }
 
 async function startScan() {
-    if (!navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia && useBrowserFrameBridge) {
         els.prompt.textContent = 'Camera access is not available in this browser.';
         setStatus('No camera', 'error');
         return;
@@ -408,11 +442,17 @@ async function startScan() {
         setStatus('Starting', 'busy');
         els.start.disabled = true;
         resetScan();
-        await startCamera();
-        await startSdkStream();
+        const sdkStarted = await startSdkStream();
+        if (!sdkStarted || !scan.nativeCameraMode) {
+            await startCamera();
+        }
         scan.running = true;
         els.stop.disabled = false;
-        els.prompt.textContent = 'Hold still with face and upper chest in view. The whole frame is used.';
+        els.prompt.textContent = scan.nativeCameraMode
+            ? 'SmartSpectra is using the Mac camera directly. Hold still with face and upper chest visible.'
+            : (scan.sdkStreaming
+                ? 'Streaming the iPhone camera to SmartSpectra. Hold still with face and upper chest visible.'
+                : 'Hold still with face and upper chest in view. The whole frame is used.');
         setStatus('Scanning', 'running');
         tick();
     } catch (error) {
@@ -426,6 +466,7 @@ async function startScan() {
 async function stopScan() {
     scan.running = false;
     cancelAnimationFrame(scan.raf);
+    clearTimeout(scan.raf);
     stopCamera();
     await stopSdkStream();
     els.start.disabled = false;
@@ -531,6 +572,9 @@ els.insightForm.addEventListener('submit', async (event) => {
 });
 
 window.addEventListener('beforeunload', () => {
+    if (scan.sdkStreaming) {
+        navigator.sendBeacon?.('/api/smartspectra/session/stop');
+    }
     stopCamera();
 });
 

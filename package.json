@@ -25,6 +25,8 @@
     "@smartspectra/node-sdk": "^3.3.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "electron": "^44.3.0",
+    "esbuild": "^0.28.2",
     "express": "^5.2.1"
   }
 }

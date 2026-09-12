@@ -11,6 +11,7 @@ let lastMetricsAt = null;
 let lastFrame = null;
 let lastInsight = null;
 let lastError = null;
+let metricsPacketCount = 0;
 let arterialPressureSeries = [];
 const maxSeriesPoints = 600;
 
@@ -73,6 +74,7 @@ function getSdkStatus() {
         processingStatus,
         validationStatus,
         latestVitals,
+        metricsPacketCount,
         arterialPressureSeries,
         lastMetricsAt,
         lastFrame,
@@ -96,6 +98,7 @@ function createSmartSpectraSession() {
     return new sdk.SmartSpectraSDK({
         apiKey: getApiKey(),
         requestedMetrics: getRequestedMetrics(),
+        logLevel: sdk.SmartSpectraLogLevel?.kWarning,
     });
 }
 
@@ -104,10 +107,10 @@ function configureInputSource(session, options = {}) {
 
     if (source === 'camera') {
         session.useCamera({
-            deviceIndex: Number(options.deviceIndex || 0),
-            width: Number(options.width || 0),
-            height: Number(options.height || 0),
-            fps: Number(options.fps || 0),
+            deviceIndex: Number(options.deviceIndex ?? process.env.CAMERA_INDEX ?? 0),
+            width: Number(options.width ?? process.env.CAMERA_WIDTH ?? 1280),
+            height: Number(options.height ?? process.env.CAMERA_HEIGHT ?? 720),
+            fps: Number(options.fps ?? process.env.CAMERA_FPS ?? 30),
         });
         return 'camera';
     }
@@ -150,6 +153,7 @@ async function startSmartSpectraSession(options = {}) {
     validationStatus = null;
     latestVitals = null;
     lastMetricsAt = null;
+    metricsPacketCount = 0;
     arterialPressureSeries = [];
     lastInsight = null;
     lastError = null;
@@ -168,6 +172,7 @@ async function startSmartSpectraSession(options = {}) {
     });
 
     session.on('metrics', (buffer, timestampUs) => {
+        metricsPacketCount += 1;
         const vitals = readLatestVitals(buffer);
         appendArterialPressure(vitals?.arterialPressureTraceSamples);
         if (vitals) delete vitals.arterialPressureTraceSamples;
