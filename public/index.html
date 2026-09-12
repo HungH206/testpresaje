@@ -12,7 +12,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="./icons/icon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260912-frame-noop">
+    <link rel="stylesheet" href="./styles.css?v=20260912-run-mode">
 </head>
 <body>
     <header class="app-header">
@@ -72,6 +72,36 @@
             </article>
         </section>
 
+        <section class="run-mode" aria-label="SmartSpectra run mode">
+            <div class="section-heading">
+                <h2>Run Mode</h2>
+                <span id="modeStatus">Checking SDK</span>
+            </div>
+            <dl class="mode-grid">
+                <div>
+                    <dt>Pipeline</dt>
+                    <dd id="modePipeline">--</dd>
+                </div>
+                <div>
+                    <dt>Camera Input</dt>
+                    <dd id="modeCamera">--</dd>
+                </div>
+                <div>
+                    <dt>Metrics</dt>
+                    <dd id="modeMetrics">--</dd>
+                </div>
+                <div>
+                    <dt>Packets</dt>
+                    <dd id="modePackets">0</dd>
+                </div>
+            </dl>
+            <div class="mode-links">
+                <a id="modeLocalLink" href="/">Mac native</a>
+                <a id="modeBridgeLink" href="/?bridge=1">Browser bridge</a>
+                <a id="modeIphoneLink" href="/?native=1">iPhone tunnel</a>
+            </div>
+        </section>
+
         <section class="chart-section" aria-label="Pulse signal chart">
             <div class="section-heading">
                 <h2>Relative Arterial Pressure</h2>
@@ -123,6 +153,6 @@
         </aside>
     </main>
 
-    <script src="./renderer.js?v=20260912-frame-noop"></script>
+    <script src="./renderer.js?v=20260912-run-mode"></script>
 </body>
 </html>

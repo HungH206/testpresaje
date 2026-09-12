@@ -32,6 +32,14 @@ const els = {
     insightPrompt: $('insightPrompt'),
     insightStatus: $('insightStatus'),
     insightResult: $('insightResult'),
+    modeStatus: $('modeStatus'),
+    modePipeline: $('modePipeline'),
+    modeCamera: $('modeCamera'),
+    modeMetrics: $('modeMetrics'),
+    modePackets: $('modePackets'),
+    modeLocalLink: $('modeLocalLink'),
+    modeBridgeLink: $('modeBridgeLink'),
+    modeIphoneLink: $('modeIphoneLink'),
 };
 
 const scan = {
@@ -46,19 +54,52 @@ const scan = {
     nativeSessionEnabled: false,
     nativeCameraMode: false,
     lastFrameSentAt: 0,
+    frameInFlight: false,
     lastPixels: null,
 };
 
 const historyKey = 'vitalscan-history';
 const maxSamples = 900;
-const frameWidth = 320;
-const frameHeight = 240;
-const frameIntervalMs = 180;
 const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 const query = new URLSearchParams(window.location.search);
 const forceNativeStreaming = query.get('native') === '1';
 const forceBrowserBridge = query.get('bridge') === '1';
 const useBrowserFrameBridge = forceBrowserBridge || (!isLocalHost && forceNativeStreaming);
+const frameWidth = Math.max(160, Math.min(640, Number(query.get('w') || 480)));
+const frameHeight = Math.max(120, Math.min(480, Number(query.get('h') || 270)));
+const targetBridgeFps = Math.max(5, Math.min(30, Number(query.get('fps') || 15)));
+const frameIntervalMs = Math.round(1000 / targetBridgeFps);
+
+els.canvas.width = frameWidth;
+els.canvas.height = frameHeight;
+
+function setModeLinks() {
+    const base = `${window.location.origin}${window.location.pathname}`;
+    els.modeLocalLink.href = base;
+    els.modeBridgeLink.href = `${base}?bridge=1&w=${frameWidth}&h=${frameHeight}&fps=${targetBridgeFps}`;
+    els.modeIphoneLink.href = `${base}?native=1&w=320&h=240&fps=30`;
+}
+
+function describePipeline(status = {}) {
+    if (!status.nativeSessionEnabled) return 'Hosted UI only';
+    if (status.activeSource === 'camera') return 'Express -> SmartSpectra useCamera()';
+    if (status.activeSource === 'custom') return 'iPhone/browser -> Express -> SmartSpectra useCustomInput()';
+    if (useBrowserFrameBridge) return 'Ready for browser frame bridge';
+    return 'Ready for native Mac camera';
+}
+
+function renderRunMode(status = {}) {
+    const source = status.activeSource || (useBrowserFrameBridge ? 'custom' : 'camera');
+    els.modeStatus.textContent = status.sessionActive ? 'SDK running' : 'Ready';
+    els.modePipeline.textContent = describePipeline(status);
+    els.modeCamera.textContent = source === 'camera'
+        ? '1280x720 at 30fps'
+        : `${frameWidth}x${frameHeight} at ${targetBridgeFps}fps`;
+    els.modeMetrics.textContent = status.requestedMetricCount
+        ? `${status.requestedMetricCount} cardio metrics`
+        : '--';
+    els.modePackets.textContent = String(status.metricsPacketCount || 0);
+}
 
 function setStatus(text, state) {
     els.status.textContent = text;
@@ -73,6 +114,7 @@ function resetScan() {
     scan.sdkStreaming = false;
     scan.nativeCameraMode = false;
     scan.lastFrameSentAt = 0;
+    scan.frameInFlight = false;
     scan.lastPixels = null;
     els.pulse.textContent = '--';
     els.pressure.textContent = '--';
@@ -235,10 +277,12 @@ async function stopSdkStream() {
 
 async function sendFrameToSdk(frame) {
     if (!scan.sdkStreaming || scan.nativeCameraMode) return;
+    if (scan.frameInFlight) return;
 
     const now = performance.now();
     if (now - scan.lastFrameSentAt < frameIntervalMs) return;
     scan.lastFrameSentAt = now;
+    scan.frameInFlight = true;
 
     try {
         const response = await fetch('/api/smartspectra/frame', {
@@ -267,6 +311,8 @@ async function sendFrameToSdk(frame) {
     } catch {
         scan.sdkStreaming = false;
         scan.nativeCameraMode = false;
+    } finally {
+        scan.frameInFlight = false;
     }
 }
 
@@ -354,6 +400,7 @@ async function pollSdkStatus() {
         const vitals = status.latestVitals || {};
         const pulseRate = vitals.pulseRate;
         scan.nativeSessionEnabled = Boolean(status.nativeSessionEnabled);
+        renderRunMode(status);
 
         if (typeof pulseRate === 'number') {
             scan.pulse = Math.round(pulseRate);
@@ -404,6 +451,7 @@ async function pollSdkStatus() {
         }
     } catch {
         els.insightStatus.textContent = 'Status unavailable';
+        renderRunMode();
     }
 }
 
@@ -579,5 +627,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 renderHistory();
+setModeLinks();
+renderRunMode();
 drawChart();
 pollSdkStatus();

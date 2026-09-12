@@ -134,6 +134,7 @@ h2 {
 }
 
 .scanner,
+.run-mode,
 .chart-section,
 .manual-entry,
 .insights,
@@ -257,6 +258,7 @@ h2 {
 }
 
 .chart-section,
+.run-mode,
 .manual-entry,
 .insights,
 .notice {
@@ -278,6 +280,62 @@ h2 {
 .section-heading span {
     color: var(--muted);
     font-size: 13px;
+}
+
+.run-mode {
+    grid-column: 1 / -1;
+}
+
+.mode-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+}
+
+.mode-grid div {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    background: rgba(16, 25, 35, 0.72);
+}
+
+.mode-grid dt {
+    margin: 0 0 7px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.mode-grid dd {
+    margin: 0;
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.mode-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.mode-links a {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0 12px;
+    color: var(--accent-2);
+    background: rgba(16, 25, 35, 0.72);
+    font-size: 13px;
+    font-weight: 800;
+    text-decoration: none;
 }
 
 #signalChart {
@@ -394,6 +452,10 @@ input:focus {
     .history-item {
         grid-template-columns: 1fr 1fr;
     }
+
+    .mode-grid {
+        grid-template-columns: 1fr 1fr;
+    }
 }
 
 @media (max-width: 420px) {
@@ -412,6 +474,10 @@ input:focus {
     }
 
     .history-item {
+        grid-template-columns: 1fr;
+    }
+
+    .mode-grid {
         grid-template-columns: 1fr;
     }
 }
