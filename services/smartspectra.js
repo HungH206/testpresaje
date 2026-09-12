@@ -60,7 +60,6 @@ function getRequestedMetrics() {
         return [
             ...(sdk.breathingMetrics || []),
             ...(pulseRateMetric == null ? [] : [pulseRateMetric]),
-            ...(sdk.faceMetrics || []),
         ];
     }
 
@@ -83,7 +82,7 @@ function getSdkStatus() {
         hasApiKey: hasConfiguredApiKey(),
         requestedBundles: process.env.SMARTSPECTRA_METRIC_MODE === 'full'
             ? ['cardio', 'breathing', 'face']
-            : ['pulse', 'breathing', 'face'],
+            : ['pulse', 'breathing'],
         requestedMetricCount: requestedMetrics.length,
         insightSupport: Boolean(sdk.SmartSpectraSDK),
         sessionActive: Boolean(activeSession),
