@@ -20,7 +20,8 @@ test('RGBA rotation preserves pixels and portrait dimensions', () => {
 
 test('token endpoint authenticates and restricts browser roles', async () => {
     const variables = { LIVEKIT_URL: 'wss://test.livekit.cloud', LIVEKIT_API_KEY: 'test-key',
-        LIVEKIT_API_SECRET: 'test-secret-not-a-real-credential', LIVEKIT_ACCESS_CODE: 'test-code', LIVEKIT_ROOM: 'test-room' };
+        LIVEKIT_API_SECRET: 'test-secret-not-a-real-credential', LIVEKIT_ACCESS_CODE: 'test-code',
+        LIVEKIT_REQUIRE_ACCESS_CODE: '1', LIVEKIT_ROOM: 'test-room' };
     const previous = Object.fromEntries(Object.keys(variables).map(key => [key, process.env[key]]));
     Object.assign(process.env, variables);
     async function request(body) {
@@ -47,13 +48,14 @@ test('token endpoint authenticates and restricts browser roles', async () => {
     }
 });
 
-test('token endpoint allows empty access code when none is configured', async () => {
+test('token endpoint allows empty access code unless explicitly required', async () => {
     const variables = { LIVEKIT_URL: 'wss://test.livekit.cloud', LIVEKIT_API_KEY: 'test-key',
-        LIVEKIT_API_SECRET: 'test-secret-not-a-real-credential', LIVEKIT_ROOM: 'test-room' };
-    const previous = Object.fromEntries([...Object.keys(variables), 'LIVEKIT_ACCESS_CODE']
+        LIVEKIT_API_SECRET: 'test-secret-not-a-real-credential',
+        LIVEKIT_ACCESS_CODE: 'old-vercel-code', LIVEKIT_ROOM: 'test-room' };
+    const previous = Object.fromEntries([...Object.keys(variables), 'LIVEKIT_REQUIRE_ACCESS_CODE']
         .map(key => [key, process.env[key]]));
     Object.assign(process.env, variables);
-    delete process.env.LIVEKIT_ACCESS_CODE;
+    delete process.env.LIVEKIT_REQUIRE_ACCESS_CODE;
     const res = { code: 200, setHeader() {}, status(code) { this.code = code; return this; }, json(value) { this.body = value; } };
     try {
         await tokenHandler({ method: 'POST', body: { role: 'publisher', accessCode: '' } }, res);

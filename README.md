@@ -118,6 +118,7 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_ACCESS_CODE=
+LIVEKIT_REQUIRE_ACCESS_CODE=
 LIVEKIT_ROOM=vitalscan-test
 ```
 
@@ -128,6 +129,7 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_ACCESS_CODE=
+LIVEKIT_REQUIRE_ACCESS_CODE=
 LIVEKIT_ROOM=vitalscan-test
 SMARTSPECTRA_API_KEY=your_presage_key
 SMARTSPECTRA_METRIC_MODE=baseline

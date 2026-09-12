@@ -14,11 +14,6 @@ export default function Home() {
                 <link rel="manifest" href="/manifest.webmanifest" />
                 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
                 <link rel="apple-touch-icon" href="/icons/icon.svg" />
-                <script
-                    dangerouslySetInnerHTML={{
-                        __html: "try{if(new URLSearchParams(location.search).get('capture')==='phone')document.documentElement.dataset.phoneCapture='true'}catch{}",
-                    }}
-                />
                 <link rel="stylesheet" href="/styles.css?v=20260912-baseline-phone" />
             </Head>
 

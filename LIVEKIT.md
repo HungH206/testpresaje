@@ -17,6 +17,7 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_ACCESS_CODE=
+LIVEKIT_REQUIRE_ACCESS_CODE=
 LIVEKIT_ROOM=vitalscan-test
 SMARTSPECTRA_API_KEY=your_presage_key
 SMARTSPECTRA_METRIC_MODE=baseline
@@ -27,11 +28,12 @@ command `npm run build`. Set `SMARTSPECTRA_API_KEY` only on the worker host,
 not in browser code.
 Never put API secrets in browser JavaScript or in a URL.
 
-This is a shared, single-scan test room. Leave `LIVEKIT_ACCESS_CODE` blank for
-manual no-code testing, or set a random code to require it again. The token
-endpoint issues short-lived, room-scoped tokens; it never issues processor
-credentials to browsers. Production needs user authentication and isolated
-rooms/workers per scan.
+This is a shared, single-scan test room. Access codes are ignored by default for
+manual no-code testing. Set `LIVEKIT_REQUIRE_ACCESS_CODE=1` and
+`LIVEKIT_ACCESS_CODE` to a random code to require it again. The token endpoint
+issues short-lived, room-scoped tokens; it never issues processor credentials to
+browsers. Production needs user authentication and isolated rooms/workers per
+scan.
 
 ## Run the worker
 
@@ -59,6 +61,7 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_ACCESS_CODE=
+LIVEKIT_REQUIRE_ACCESS_CODE=
 LIVEKIT_ROOM=vitalscan-test
 SMARTSPECTRA_API_KEY=your_presage_key
 SMARTSPECTRA_METRIC_MODE=baseline
