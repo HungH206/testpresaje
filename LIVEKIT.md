@@ -16,7 +16,7 @@ URL and API credentials. Add these values to your local `.env`:
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
-LIVEKIT_ACCESS_CODE=a-long-random-test-access-code
+LIVEKIT_ACCESS_CODE=
 LIVEKIT_ROOM=vitalscan-test
 SMARTSPECTRA_API_KEY=your_presage_key
 SMARTSPECTRA_METRIC_MODE=baseline
@@ -27,11 +27,11 @@ command `npm run build`. Set `SMARTSPECTRA_API_KEY` only on the worker host,
 not in browser code.
 Never put API secrets in browser JavaScript or in a URL.
 
-This is a shared, single-scan test room. Everyone with the test access code can
-join and receive results. Use a random code, share only with your testers, and
-rotate it after testing. The token endpoint issues short-lived, room-scoped
-tokens; it never issues processor credentials to browsers. Production needs
-user authentication and isolated rooms/workers per scan.
+This is a shared, single-scan test room. Leave `LIVEKIT_ACCESS_CODE` blank for
+manual no-code testing, or set a random code to require it again. The token
+endpoint issues short-lived, room-scoped tokens; it never issues processor
+credentials to browsers. Production needs user authentication and isolated
+rooms/workers per scan.
 
 ## Run the worker
 
@@ -58,7 +58,7 @@ The worker host needs:
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
-LIVEKIT_ACCESS_CODE=a-long-random-test-access-code
+LIVEKIT_ACCESS_CODE=
 LIVEKIT_ROOM=vitalscan-test
 SMARTSPECTRA_API_KEY=your_presage_key
 SMARTSPECTRA_METRIC_MODE=baseline
@@ -66,10 +66,10 @@ SMARTSPECTRA_METRIC_MODE=baseline
 
 Use Node 24. `package.json` pins the app to Node 24.x.
 
-On the dashboard, enter the test access code, select **Use Phone Camera**, and
-click **Connect Dashboard**. Enter your deployed website URL in the address
-field. Open the generated `?capture=phone` link on the iPhone, enter the same
-code, then tap **Start Scan** and grant camera permission.
+On the dashboard, select **Use Phone Camera** and click **Connect Dashboard**.
+Enter your deployed website URL in the address field. Open the generated
+`?capture=phone` link on the iPhone, then tap **Start Scan** and grant camera
+permission.
 
 **Use Mac Camera** uses the Mac browser camera through LiveKit. The explicit
 `http://localhost:3000/?camera=server` route retains the direct native camera

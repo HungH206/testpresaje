@@ -47,6 +47,27 @@ test('token endpoint authenticates and restricts browser roles', async () => {
     }
 });
 
+test('token endpoint allows empty access code when none is configured', async () => {
+    const variables = { LIVEKIT_URL: 'wss://test.livekit.cloud', LIVEKIT_API_KEY: 'test-key',
+        LIVEKIT_API_SECRET: 'test-secret-not-a-real-credential', LIVEKIT_ROOM: 'test-room' };
+    const previous = Object.fromEntries([...Object.keys(variables), 'LIVEKIT_ACCESS_CODE']
+        .map(key => [key, process.env[key]]));
+    Object.assign(process.env, variables);
+    delete process.env.LIVEKIT_ACCESS_CODE;
+    const res = { code: 200, setHeader() {}, status(code) { this.code = code; return this; }, json(value) { this.body = value; } };
+    try {
+        await tokenHandler({ method: 'POST', body: { role: 'publisher', accessCode: '' } }, res);
+        assert.equal(res.code, 200);
+        const claims = await new TokenVerifier(variables.LIVEKIT_API_KEY, variables.LIVEKIT_API_SECRET).verify(res.body.token);
+        assert.equal(claims.video.room, 'test-room');
+        assert.equal(claims.video.canPublish, true);
+    } finally {
+        for (const [key, value] of Object.entries(previous)) {
+            if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+    }
+});
+
 test('only a sustained real-time stream passes camera warmup', () => {
     const { FrameCadence } = require('../services/frame-cadence');
     for (const fps of [15, 20, 30]) {

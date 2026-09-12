@@ -12,7 +12,6 @@ function announce(message) {
 }
 
 async function connect(nextRole) {
-    if (!document.getElementById('livekitCode').value) throw new Error('Enter your test access code.');
     if (room?.state === 'connected' && role === nextRole) return;
     if (pending && role === nextRole) return pending;
     await disconnect();
@@ -24,7 +23,7 @@ async function connect(nextRole) {
         announce('Connecting to LiveKit');
         const response = await fetch('/api/livekit/token', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-            body: JSON.stringify({ role: nextRole, accessCode: document.getElementById('livekitCode').value }),
+            body: JSON.stringify({ role: nextRole, accessCode: document.getElementById('livekitCode').value.trim() }),
         });
         const credentials = await response.json();
         if (!response.ok) throw new Error(credentials.error || 'Unable to connect.');

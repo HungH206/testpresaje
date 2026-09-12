@@ -6,13 +6,12 @@ const { AccessToken } = require('livekit-server-sdk');
 function config() {
     const { LIVEKIT_URL: url, LIVEKIT_API_KEY: key, LIVEKIT_API_SECRET: secret,
         LIVEKIT_ACCESS_CODE: accessCode, LIVEKIT_ROOM: room = 'vitalscan-test' } = process.env;
-    const required = { LIVEKIT_URL: url, LIVEKIT_API_KEY: key,
-        LIVEKIT_API_SECRET: secret, LIVEKIT_ACCESS_CODE: accessCode };
+    const required = { LIVEKIT_URL: url, LIVEKIT_API_KEY: key, LIVEKIT_API_SECRET: secret };
     const missing = Object.entries(required)
         .filter(([, value]) => !value?.trim())
         .map(([name]) => name);
     if (missing.length) throw new Error(`Missing LiveKit environment variables: ${missing.join(', ')}`);
-    return { url, key, secret, accessCode, room };
+    return { url, key, secret, accessCode: accessCode || '', room };
 }
 
 async function tokenFor(role) {
@@ -29,9 +28,13 @@ async function tokenHandler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
     try {
         const { accessCode } = config();
-        const supplied = Buffer.from(String(req.body?.accessCode || ''));
-        const expected = Buffer.from(accessCode);
-        if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+        const supplied = String(req.body?.accessCode || '');
+        const expected = String(accessCode || '');
+        const codeRequired = expected.length > 0;
+        const suppliedBuffer = Buffer.from(supplied);
+        const expectedBuffer = Buffer.from(expected);
+        if (codeRequired && (suppliedBuffer.length !== expectedBuffer.length
+                || !timingSafeEqual(suppliedBuffer, expectedBuffer))) {
             return res.status(401).json({ error: 'Invalid test access code' });
         }
         const role = req.body?.role;

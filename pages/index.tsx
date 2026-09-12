@@ -33,7 +33,7 @@ export default function Home() {
             <main className="shell">
                 <section className="scanner" aria-label="Camera scanner">
                     <div className="livekit-settings">
-                        <label htmlFor="livekitCode">Test access code</label>
+                        <label htmlFor="livekitCode">Access code optional</label>
                         <input id="livekitCode" type="password" autoComplete="off" />
                         <span id="connectionState" role="status">Not connected</span>
                         <span id="livekitRates" role="status">Capture -- fps / Received -- fps / Accepted -- fps</span>
