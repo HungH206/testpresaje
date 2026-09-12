@@ -375,9 +375,9 @@ async function pollSdkStatus() {
             status = window.vitalLivekit.getStatus();
             const transport = status.transport || {};
             $('livekitRates').textContent = `Capture ${transport.captureFps == null ? '--' : transport.captureFps.toFixed(1)} fps / Received ${(transport.receivedFps || 0).toFixed(1)} fps / Accepted ${(transport.acceptedFps || 0).toFixed(1)} fps`;
-            $('connectionState').textContent = !status.worker?.ready ? 'Worker configuration incomplete'
+            $('connectionState').textContent = !status.worker?.ready ? 'Processor configuration incomplete'
                 : transport.phase === 'warming' ? 'Camera connected; stabilizing video'
-                    : status.sessionActive ? 'Measuring' : 'Worker ready; waiting for camera';
+                    : status.sessionActive ? 'Measuring' : 'Processor ready; waiting for camera';
             clearReadouts();
             if (transport.error) {
                 els.confidence.textContent = transport.error;

@@ -54,6 +54,16 @@ function loadSdkExports() {
 
 function getRequestedMetrics() {
     const sdk = loadSdkExports();
+    const metricMode = (process.env.SMARTSPECTRA_METRIC_MODE || 'baseline').toLowerCase();
+    const pulseRateMetric = Array.isArray(sdk.cardioMetrics) ? sdk.cardioMetrics[0] : null;
+    if (metricMode !== 'full') {
+        return [
+            ...(sdk.breathingMetrics || []),
+            ...(pulseRateMetric == null ? [] : [pulseRateMetric]),
+            ...(sdk.faceMetrics || []),
+        ];
+    }
+
     return [
         ...(sdk.cardioMetrics || []),
         ...(sdk.breathingMetrics || []),
@@ -71,7 +81,9 @@ function getSdkStatus() {
         nativeSessionEnabled: process.env.VERCEL !== '1' || process.env.SMARTSPECTRA_NATIVE_ENABLED === '1',
         version: sdk.SmartSpectraSDK?.version || null,
         hasApiKey: hasConfiguredApiKey(),
-        requestedBundles: ['cardio', 'breathing', 'face'],
+        requestedBundles: process.env.SMARTSPECTRA_METRIC_MODE === 'full'
+            ? ['cardio', 'breathing', 'face']
+            : ['pulse', 'breathing', 'face'],
         requestedMetricCount: requestedMetrics.length,
         insightSupport: Boolean(sdk.SmartSpectraSDK),
         sessionActive: Boolean(activeSession),

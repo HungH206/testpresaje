@@ -107,31 +107,41 @@ Open the Vercel deployment URL on the iPhone, tap **Start Scan**, and allow came
 
 Live SmartSpectra frame streaming and LLM Insights require a persistent Node/Express process. Vercel serverless routes return clean no-op JSON responses for those live session endpoints so iPhone camera testing stays smooth.
 
-## Deploy The LiveKit Worker
+## Deploy The LiveKit Agent
 
-The scan worker must run as a persistent process. Use Render for this part and keep the Next.js app on Vercel.
+The scan processor should run as a LiveKit Agent. Keep the Next.js app on Vercel and deploy the realtime processor with LiveKit Cloud.
 
-This repo includes `render.yaml` for a Render background worker:
+Set `LIVEKIT_AGENT_NAME` in Vercel so the token endpoint explicitly dispatches the agent into the scan room:
 
-```bash
-npm run worker
+```dotenv
+LIVEKIT_AGENT_NAME=vitalscan-agent
 ```
 
-Create a Render Blueprint from the GitHub repo, then set these worker environment variables:
+Deploy the agent with the LiveKit CLI:
+
+```bash
+lk cloud auth
+lk agent create .
+lk agent status
+lk agent logs
+```
+
+Set these LiveKit Agent secrets:
 
 ```dotenv
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
-LIVEKIT_ACCESS_CODE=the_same_code_used_by_vercel
 LIVEKIT_ROOM=vitalscan-test
+LIVEKIT_AGENT_NAME=vitalscan-agent
 SMARTSPECTRA_API_KEY=your_presage_key
 ```
 
-The worker is ready when Render logs show:
+For local development without deploying an agent, `npm run worker` still runs the same processor from your Mac.
+You can also run the Agent Framework entrypoint locally:
 
-```text
-LiveKit worker connected. Waiting for a camera.
+```bash
+npm run agent:dev
 ```
 
 ## Commit

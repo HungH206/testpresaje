@@ -2,8 +2,8 @@
 
 The website publishes camera video to LiveKit Cloud. A persistent worker
 subscribes, decodes frames, runs SmartSpectra, and publishes results back to the
-room. The phone and dashboard can use Vercel HTTPS, while the worker can run on
-Render. No Cloudflare tunnel or
+room. The phone and dashboard can use Vercel HTTPS, while production processing
+runs as a LiveKit Agent. No Cloudflare tunnel or
 browser frame-upload endpoint is used by this workflow.
 
 ## Configuration
@@ -18,12 +18,13 @@ LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
 LIVEKIT_ACCESS_CODE=a-long-random-test-access-code
 LIVEKIT_ROOM=vitalscan-test
+LIVEKIT_AGENT_NAME=vitalscan-agent
 SMARTSPECTRA_API_KEY=your_presage_key
 ```
 
 Set the same five LIVEKIT variables in Vercel, then redeploy with the build
 command `npm run build`. Set the same LiveKit variables plus
-`SMARTSPECTRA_API_KEY` on the Render worker.
+`SMARTSPECTRA_API_KEY` as LiveKit Agent secrets.
 Never put API secrets in browser JavaScript or in a URL.
 
 This is a shared, single-scan test room. Everyone with the test access code can
@@ -32,7 +33,7 @@ rotate it after testing. The token endpoint issues short-lived, room-scoped
 tokens; it never issues processor credentials to browsers. Production needs
 user authentication and isolated rooms/workers per scan.
 
-## Run locally
+## Run locally without an agent
 
 ```sh
 npm install
@@ -42,31 +43,40 @@ npm run worker
 Keep the worker running on your Mac. In another terminal, `npm run dev` serves
 the local dashboard, or use the deployed Vercel site on both devices.
 
-## Deploy the worker on Render
+## Deploy as a LiveKit Agent
 
-This repo includes `render.yaml`, which defines a background worker service:
+For production demos, deploy the processor as a LiveKit Agent named
+`vitalscan-agent`. The Vercel token endpoint dispatches this agent when
+`LIVEKIT_AGENT_NAME` is set.
 
-```yaml
-startCommand: npm run worker
+Use the LiveKit CLI:
+
+```sh
+lk cloud auth
+lk agent create .
 ```
 
-In Render, create a new Blueprint from this repository and set these environment
-variables on the `vitalscan-livekit-worker` service:
+Set these agent secrets in LiveKit Cloud:
 
 ```dotenv
 LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=your_livekit_api_key
 LIVEKIT_API_SECRET=your_livekit_api_secret
-LIVEKIT_ACCESS_CODE=the_same_code_used_by_vercel
 LIVEKIT_ROOM=vitalscan-test
+LIVEKIT_AGENT_NAME=vitalscan-agent
 SMARTSPECTRA_API_KEY=your_presage_key
 ```
 
-Use Node 24. The blueprint sets `NODE_VERSION=24`, and `package.json` also pins
-the app to Node 24.x.
+Use Node 24. `package.json` pins the app to Node 24.x.
 
-When the Render logs show `LiveKit worker connected. Waiting for a camera.`, the
-Vercel dashboard should stop reporting `Mac worker offline`.
+When `lk agent status` shows the agent online, the Vercel dashboard should stop
+reporting the processor as offline.
+
+For local agent development, run:
+
+```sh
+npm run agent:dev
+```
 
 On the dashboard, enter the test access code, select **Use Phone Camera**, and
 click **Connect Dashboard**. Enter your deployed website URL in the address
@@ -82,7 +92,7 @@ scan.
 
 - Capture FPS counts frames presented to the phone video element, using
   `requestVideoFrameCallback`; it is not a sensor-level FPS measurement.
-- Received FPS counts decoded frames delivered to the Mac worker.
+- Received FPS counts decoded frames delivered to the processor.
 - Accepted FPS counts frames accepted by SmartSpectra.
 - The worker preserves decoded-media timestamps and handles rotation without
   stretching. These are LiveKit media timestamps, not a claim of exact sensor

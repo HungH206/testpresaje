@@ -43,7 +43,7 @@ async function connect(nextRole) {
             if (room === candidate && participant.identity === 'processor') {
                 status = null;
                 updatedAt = 0;
-                announce('Mac worker offline');
+                announce('Processor offline');
                 if (track) window.dispatchEvent(new Event('livekit-lost'));
             }
         });
@@ -60,7 +60,7 @@ async function connect(nextRole) {
         try {
             await candidate.connect(credentials.url, credentials.token);
             if (attempt !== generation) { await candidate.disconnect(); throw new Error('Connection cancelled.'); }
-            announce('LiveKit connected; checking Mac worker');
+            announce('LiveKit connected; checking processor');
         } catch (error) {
             const reason = error.reason === ConnectionErrorReason.LeaveRequest ? DisconnectReason[error.context] : error.reasonName;
             if (room === candidate) await disconnect();
@@ -87,8 +87,8 @@ async function waitForWorker(predicate, timeoutMessage) {
 async function start(stream) {
     await connect('publisher');
     // Confirm readiness from the worker heartbeat, without a separate RPC exchange.
-    const ready = await waitForWorker(() => true, 'Mac worker offline. Run npm run worker on your Mac.');
-    if (!ready.worker?.ready) throw new Error('SmartSpectra is not configured on the Mac worker.');
+    const ready = await waitForWorker(() => true, 'Processor offline. Check the LiveKit Agent or run npm run worker locally.');
+    if (!ready.worker?.ready) throw new Error('SmartSpectra is not configured on the processor.');
     if (ready.transport?.publisherIdentity) throw new Error('Another camera is scanning. Stop it first.');
     const candidate = room;
     const attempt = generation;
@@ -139,7 +139,7 @@ window.vitalLivekit = {
     getStatus() {
         if (connectionError || scanError) throw new Error(connectionError || scanError);
         if (!room || room.state !== 'connected') throw new Error('Not connected');
-        if (!status || Date.now() - updatedAt > 5000) throw new Error('Mac worker offline. Run npm run worker on your Mac.');
+        if (!status || Date.now() - updatedAt > 5000) throw new Error('Processor offline. Check the LiveKit Agent or run npm run worker locally.');
         return status;
     },
     get captureFps() { return captureFps; },
