@@ -1,0 +1,28 @@
+{
+  "name": "testpresaje",
+  "version": "1.0.0",
+  "description": "Browser-based wellness vital scanner for desktop and mobile.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --check server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HungH206/testpresaje.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/HungH206/testpresaje/issues"
+  },
+  "homepage": "https://github.com/HungH206/testpresaje#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}

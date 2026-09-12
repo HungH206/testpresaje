@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0f1720">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self';">
+    <title>VitalScan</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+    <header class="app-header">
+        <div>
+            <p class="eyebrow">wellness camera check</p>
+            <h1>VitalScan</h1>
+        </div>
+        <span id="statusBadge" class="status">Ready</span>
+    </header>
+
+    <main class="shell">
+        <section class="scanner" aria-label="Camera scanner">
+            <div class="camera-wrap">
+                <video id="camera" autoplay playsinline muted></video>
+                <canvas id="sampleCanvas" width="96" height="96" hidden></canvas>
+                <div class="target-ring" aria-hidden="true"></div>
+                <div id="cameraPrompt" class="camera-prompt">Place a fingertip over the camera, turn on good light, then start a scan.</div>
+            </div>
+
+            <div class="toolbar">
+                <button id="startButton" type="button">Start Scan</button>
+                <button id="stopButton" type="button" disabled>Stop</button>
+                <button id="saveButton" type="button" disabled>Save</button>
+            </div>
+        </section>
+
+        <section class="readouts" aria-label="Current scan results">
+            <article class="metric primary">
+                <span>Pulse estimate</span>
+                <strong><span id="pulseValue">--</span> bpm</strong>
+                <small id="confidenceText">Waiting for scan</small>
+            </article>
+            <article class="metric">
+                <span>Signal quality</span>
+                <strong id="qualityValue">--</strong>
+                <small>Keep finger still and cover the lens</small>
+            </article>
+            <article class="metric">
+                <span>Scan time</span>
+                <strong><span id="timerValue">0</span>s</strong>
+                <small>Best after 20-30 seconds</small>
+            </article>
+        </section>
+
+        <section class="chart-section" aria-label="Pulse signal chart">
+            <div class="section-heading">
+                <h2>Live Signal</h2>
+                <span id="sampleCount">0 samples</span>
+            </div>
+            <canvas id="signalChart" width="900" height="260"></canvas>
+        </section>
+
+        <section class="manual-entry" aria-label="Manual health log">
+            <div class="section-heading">
+                <h2>Health Log</h2>
+                <button id="clearHistoryButton" class="quiet" type="button">Clear</button>
+            </div>
+            <form id="manualForm">
+                <label>
+                    SpO2 %
+                    <input id="spo2Input" inputmode="numeric" min="70" max="100" type="number" placeholder="98">
+                </label>
+                <label>
+                    Temperature F
+                    <input id="tempInput" inputmode="decimal" min="90" max="110" step="0.1" type="number" placeholder="98.6">
+                </label>
+                <label>
+                    Blood pressure
+                    <input id="bpInput" inputmode="text" type="text" placeholder="120/80">
+                </label>
+                <button type="submit">Add Manual Reading</button>
+            </form>
+            <div id="historyList" class="history-list"></div>
+        </section>
+
+        <aside class="notice">
+            Camera estimates are for wellness tracking only and can be wrong. Do not use this app for emergencies, diagnosis, or medication decisions.
+        </aside>
+    </main>
+
+    <script src="./renderer.js"></script>
+</body>
+</html>
