@@ -136,6 +136,7 @@ h2 {
 .scanner,
 .chart-section,
 .manual-entry,
+.insights,
 .notice {
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -165,11 +166,11 @@ h2 {
     position: absolute;
     left: 50%;
     top: 50%;
-    width: min(42vw, 220px);
-    aspect-ratio: 1;
+    width: min(68vw, 360px);
+    aspect-ratio: 3 / 4;
     transform: translate(-50%, -50%);
     border: 3px solid rgba(45, 212, 191, 0.86);
-    border-radius: 50%;
+    border-radius: 28px;
     box-shadow: 0 0 0 999px rgba(2, 8, 14, 0.28);
     pointer-events: none;
 }
@@ -257,6 +258,7 @@ h2 {
 
 .chart-section,
 .manual-entry,
+.insights,
 .notice {
     padding: 16px;
 }
@@ -287,7 +289,8 @@ h2 {
     background: #101923;
 }
 
-.manual-entry {
+.manual-entry,
+.insights {
     grid-column: 1 / -1;
 }
 
@@ -347,6 +350,16 @@ input:focus {
 .empty {
     margin: 0;
     color: var(--muted);
+}
+
+.insight-result {
+    min-height: 48px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    background: rgba(16, 25, 35, 0.72);
+    color: var(--muted);
+    line-height: 1.45;
 }
 
 .notice {

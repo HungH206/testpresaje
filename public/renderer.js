@@ -22,6 +22,10 @@ const els = {
     bp: $('bpInput'),
     history: $('historyList'),
     clearHistory: $('clearHistoryButton'),
+    insightForm: $('insightForm'),
+    insightPrompt: $('insightPrompt'),
+    insightStatus: $('insightStatus'),
+    insightResult: $('insightResult'),
 };
 
 const scan = {
@@ -32,10 +36,17 @@ const scan = {
     pulse: null,
     quality: 0,
     running: false,
+    sdkStreaming: false,
+    nativeSessionEnabled: false,
+    lastFrameSentAt: 0,
+    lastPixels: null,
 };
 
-const maxSamples = 900;
 const historyKey = 'vitalscan-history';
+const maxSamples = 900;
+const frameWidth = 320;
+const frameHeight = 240;
+const frameIntervalMs = 180;
 
 function setStatus(text, state) {
     els.status.textContent = text;
@@ -47,11 +58,14 @@ function resetScan() {
     scan.samples = [];
     scan.pulse = null;
     scan.quality = 0;
+    scan.sdkStreaming = false;
+    scan.lastFrameSentAt = 0;
+    scan.lastPixels = null;
     els.pulse.textContent = '--';
     els.quality.textContent = '--';
-    els.confidence.textContent = 'Collecting signal';
+    els.confidence.textContent = 'Checking camera environment';
     els.timer.textContent = '0';
-    els.sampleCount.textContent = '0 samples';
+    els.sampleCount.textContent = '0 frames';
     els.save.disabled = true;
     drawChart();
 }
@@ -59,7 +73,7 @@ function resetScan() {
 async function startCamera() {
     const constraints = {
         video: {
-            facingMode: { ideal: 'environment' },
+            facingMode: { ideal: 'user' },
             width: { ideal: 1280 },
             height: { ideal: 720 },
         },
@@ -79,92 +93,142 @@ function stopCamera() {
     els.camera.srcObject = null;
 }
 
-function readFrame() {
+function rgbaToBase64(data) {
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < data.length; i += chunkSize) {
+        const chunk = data.subarray(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+}
+
+function readWholeFrame() {
     const video = els.camera;
     if (!video.videoWidth || !video.videoHeight) return null;
 
     const ctx = els.canvas.getContext('2d', { willReadFrequently: true });
-    const size = 64;
-    const sx = Math.max(0, Math.floor(video.videoWidth / 2 - size / 2));
-    const sy = Math.max(0, Math.floor(video.videoHeight / 2 - size / 2));
-    ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+    ctx.drawImage(video, 0, 0, frameWidth, frameHeight);
 
-    const data = ctx.getImageData(0, 0, size, size).data;
+    const pixels = ctx.getImageData(0, 0, frameWidth, frameHeight).data;
+    let brightness = 0;
     let red = 0;
     let green = 0;
     let blue = 0;
+    let motion = 0;
 
-    for (let i = 0; i < data.length; i += 4) {
-        red += data[i];
-        green += data[i + 1];
-        blue += data[i + 2];
-    }
+    for (let i = 0; i < pixels.length; i += 4) {
+        red += pixels[i];
+        green += pixels[i + 1];
+        blue += pixels[i + 2];
+        brightness += (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
 
-    const pixels = data.length / 4;
-    return {
-        t: (performance.now() - scan.startedAt) / 1000,
-        red: red / pixels,
-        green: green / pixels,
-        blue: blue / pixels,
-    };
-}
-
-function normalize(values) {
-    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-    const centered = values.map((value) => value - avg);
-    const peak = Math.max(...centered.map((value) => Math.abs(value))) || 1;
-    return centered.map((value) => value / peak);
-}
-
-function estimatePulse() {
-    const recent = scan.samples.slice(-420);
-    if (recent.length < 180) return;
-
-    const values = normalize(recent.map((sample) => sample.red));
-    const times = recent.map((sample) => sample.t);
-    const duration = times[times.length - 1] - times[0];
-    if (duration < 8) return;
-
-    const crossings = [];
-    for (let i = 1; i < values.length; i++) {
-        if (values[i - 1] < 0 && values[i] >= 0) crossings.push(times[i]);
-    }
-
-    const intervals = [];
-    for (let i = 1; i < crossings.length; i++) {
-        const gap = crossings[i] - crossings[i - 1];
-        if (gap >= 0.35 && gap <= 1.5) intervals.push(gap);
-    }
-
-    const reds = recent.map((sample) => sample.red);
-    const brightness = recent.reduce((sum, sample) => {
-        return sum + sample.red + sample.green + sample.blue;
-    }, 0) / (recent.length * 3);
-    const redRange = Math.max(...reds) - Math.min(...reds);
-    const coverageScore = Math.min(1, Math.max(0, (redRange - 1.5) / 14));
-    const lightScore = brightness > 20 && brightness < 245 ? 1 : 0.35;
-    scan.quality = Math.round(coverageScore * lightScore * 100);
-
-    if (intervals.length >= 5) {
-        intervals.sort((a, b) => a - b);
-        const median = intervals[Math.floor(intervals.length / 2)];
-        const bpm = Math.round(60 / median);
-
-        if (bpm >= 40 && bpm <= 180) {
-            scan.pulse = bpm;
-            els.pulse.textContent = String(bpm);
-            els.confidence.textContent = scan.quality >= 60 ? 'Stable estimate' : 'Weak signal';
-            els.save.disabled = false;
+        if (scan.lastPixels) {
+            motion += Math.abs(pixels[i] - scan.lastPixels[i]);
+            motion += Math.abs(pixels[i + 1] - scan.lastPixels[i + 1]);
+            motion += Math.abs(pixels[i + 2] - scan.lastPixels[i + 2]);
         }
     }
 
-    renderQuality();
+    const pixelCount = frameWidth * frameHeight;
+    brightness /= pixelCount;
+    red /= pixelCount;
+    green /= pixelCount;
+    blue /= pixelCount;
+    motion = scan.lastPixels ? motion / (pixelCount * 3) : 0;
+    scan.lastPixels = new Uint8ClampedArray(pixels);
+
+    const lightScore = Math.max(0, 1 - Math.abs(brightness - 125) / 125);
+    const motionScore = Math.max(0, 1 - motion / 32);
+    const colorBalance = Math.max(red, green, blue) - Math.min(red, green, blue);
+    const colorScore = Math.max(0.2, 1 - colorBalance / 180);
+    const quality = Math.round(lightScore * motionScore * colorScore * 100);
+
+    return {
+        t: (performance.now() - scan.startedAt) / 1000,
+        brightness,
+        motion,
+        quality,
+        rgbaBase64: rgbaToBase64(pixels),
+    };
 }
 
-function renderQuality() {
+async function startSdkStream() {
+    await pollSdkStatus();
+
+    if (!scan.nativeSessionEnabled) {
+        scan.sdkStreaming = false;
+        els.confidence.textContent = 'iPhone HTTPS camera test mode';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/smartspectra/session/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source: 'custom' }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            scan.sdkStreaming = false;
+            els.confidence.textContent = payload.error || 'SmartSpectra session unavailable';
+            return;
+        }
+
+        scan.sdkStreaming = Boolean(payload.sessionActive);
+        els.confidence.textContent = scan.sdkStreaming
+            ? 'Streaming whole-camera frames to SmartSpectra'
+            : 'Local camera quality only';
+    } catch {
+        scan.sdkStreaming = false;
+        els.confidence.textContent = 'Local camera quality only';
+    }
+}
+
+async function stopSdkStream() {
+    if (!scan.sdkStreaming) return;
+
+    try {
+        await fetch('/api/smartspectra/session/stop', { method: 'POST' });
+    } catch {
+        // The local camera should still stop even if the SDK stop request fails.
+    }
+
+    scan.sdkStreaming = false;
+}
+
+async function sendFrameToSdk(frame) {
+    if (!scan.sdkStreaming) return;
+
+    const now = performance.now();
+    if (now - scan.lastFrameSentAt < frameIntervalMs) return;
+    scan.lastFrameSentAt = now;
+
+    try {
+        const response = await fetch('/api/smartspectra/frame', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                width: frameWidth,
+                height: frameHeight,
+                timestampUs: Math.round(performance.timeOrigin * 1000 + now * 1000),
+                rgbaBase64: frame.rgbaBase64,
+            }),
+        });
+
+        if (!response.ok) scan.sdkStreaming = false;
+    } catch {
+        scan.sdkStreaming = false;
+    }
+}
+
+function renderQuality(frame) {
+    scan.quality = frame.quality;
     let label = 'Weak';
-    if (scan.quality >= 70) label = 'Good';
-    else if (scan.quality >= 40) label = 'Fair';
+    if (frame.quality >= 70) label = 'Good';
+    else if (frame.quality >= 40) label = 'Fair';
+
     els.quality.textContent = label;
     els.quality.dataset.quality = label.toLowerCase();
 }
@@ -198,32 +262,64 @@ function drawChart() {
     const samples = scan.samples.slice(-240);
     if (samples.length < 2) return;
 
-    const values = normalize(samples.map((sample) => sample.red));
     ctx.strokeStyle = '#2dd4bf';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    values.forEach((value, index) => {
-        const x = (index / (values.length - 1)) * width;
-        const y = height / 2 - value * (height * 0.38);
+    samples.forEach((sample, index) => {
+        const x = (index / (samples.length - 1)) * width;
+        const y = height - (sample.quality / 100) * height;
         if (index === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     });
     ctx.stroke();
 }
 
-function tick() {
+async function pollSdkStatus() {
+    try {
+        const response = await fetch('/api/smartspectra/status');
+        const status = await response.json();
+        const pulseRate = status.latestVitals?.pulseRate;
+        scan.nativeSessionEnabled = Boolean(status.nativeSessionEnabled);
+
+        if (typeof pulseRate === 'number') {
+            scan.pulse = Math.round(pulseRate);
+            els.pulse.textContent = String(scan.pulse);
+            els.save.disabled = false;
+        }
+
+        if (status.validationStatus?.hint) {
+            els.confidence.textContent = status.validationStatus.hint;
+        } else if (status.sessionActive) {
+            els.confidence.textContent = 'SmartSpectra session active';
+        }
+
+        if (!status.nativeSessionEnabled) {
+            els.insightStatus.textContent = 'Hosted camera test mode';
+        } else {
+            els.insightStatus.textContent = status.available
+                ? `${status.requestedMetricCount} metrics configured`
+                : 'SDK unavailable';
+        }
+    } catch {
+        els.insightStatus.textContent = 'Status unavailable';
+    }
+}
+
+async function tick() {
     if (!scan.running) return;
 
-    const sample = readFrame();
-    if (sample) {
-        scan.samples.push(sample);
+    const frame = readWholeFrame();
+    if (frame) {
+        scan.samples.push(frame);
         if (scan.samples.length > maxSamples) scan.samples.shift();
-        els.timer.textContent = String(Math.floor(sample.t));
-        els.sampleCount.textContent = `${scan.samples.length} samples`;
-        estimatePulse();
+        els.timer.textContent = String(Math.floor(frame.t));
+        els.sampleCount.textContent = `${scan.samples.length} frames`;
+        renderQuality(frame);
         drawChart();
+        sendFrameToSdk(frame);
     }
 
+    if (scan.samples.length % 30 === 0) pollSdkStatus();
     scan.raf = requestAnimationFrame(tick);
 }
 
@@ -239,9 +335,10 @@ async function startScan() {
         els.start.disabled = true;
         resetScan();
         await startCamera();
+        await startSdkStream();
         scan.running = true;
         els.stop.disabled = false;
-        els.prompt.textContent = 'Hold steady. A pulse estimate appears after several seconds.';
+        els.prompt.textContent = 'Hold still with face and upper chest in view. The whole frame is used.';
         setStatus('Scanning', 'running');
         tick();
     } catch (error) {
@@ -252,10 +349,11 @@ async function startScan() {
     }
 }
 
-function stopScan() {
+async function stopScan() {
     scan.running = false;
     cancelAnimationFrame(scan.raf);
     stopCamera();
+    await stopSdkStream();
     els.start.disabled = false;
     els.stop.disabled = true;
     els.prompt.textContent = 'Scan stopped. Save the reading or start again.';
@@ -335,7 +433,33 @@ els.clearHistory.addEventListener('click', () => {
     renderHistory();
 });
 
-window.addEventListener('beforeunload', stopCamera);
+els.insightForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    els.insightResult.textContent = 'Requesting insight...';
+
+    try {
+        const response = await fetch('/api/smartspectra/insights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: els.insightPrompt.value.trim() }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            els.insightResult.textContent = payload.error || 'Insight request failed.';
+            return;
+        }
+
+        els.insightResult.textContent = `Insight request ${payload.requestId} queued. SmartSpectra will return the analysis asynchronously.`;
+    } catch (error) {
+        els.insightResult.textContent = error.message || 'Insight request failed.';
+    }
+});
+
+window.addEventListener('beforeunload', () => {
+    stopCamera();
+});
 
 renderHistory();
 drawChart();
+pollSdkStatus();

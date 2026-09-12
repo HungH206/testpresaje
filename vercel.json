@@ -1,13 +1,41 @@
 {
   "version": 2,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), microphone=()"
+        }
+      ]
+    },
+    {
+      "source": "/(styles.css|renderer.js|manifest.webmanifest|icons/icon.svg)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/health",
       "destination": "/api/health"
     },
     {
-      "source": "/:path*",
-      "destination": "/index.html"
+      "source": "/smartspectra/status",
+      "destination": "/api/smartspectra/status"
+    },
+    {
+      "source": "/api/smartspectra/insights",
+      "destination": "/api/smartspectra/insights"
     }
   ]
 }

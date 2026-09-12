@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --check app.js && node --check server.js && node --check api/health.js && node --check public/renderer.js"
+    "test": "node --check app.js && node --check server.js && node --check api/health.js && node --check api/smartspectra/status.js && node --check api/smartspectra/insights.js && node --check api/smartspectra/frame.js && node --check api/smartspectra/session/start.js && node --check api/smartspectra/session/stop.js && node --check services/smartspectra.js && node --check public/renderer.js"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
   },
   "homepage": "https://github.com/HungH206/testpresaje#readme",
   "dependencies": {
+    "@smartspectra/node-sdk": "^3.3.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"

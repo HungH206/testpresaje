@@ -3,21 +3,22 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const {
+    getSdkStatus,
+    hasConfiguredApiKey,
+    requestInsight,
+    sendCustomFrame,
+    startSmartSpectraSession,
+    stopSmartSpectraSession,
+} = require('./services/smartspectra');
 
 const publicDir = path.join(__dirname, 'public');
-
-function hasConfiguredApiKey() {
-    return Boolean(
-        process.env.VITALSCAN_API_KEY &&
-        process.env.VITALSCAN_API_KEY !== 'replace_with_your_test_key',
-    );
-}
 
 function createApp() {
     const app = express();
 
     app.use(cors());
-    app.use(express.json());
+    app.use(express.json({ limit: '12mb' }));
     app.use(express.static(publicDir, {
         extensions: ['html'],
         setHeaders(res) {
@@ -31,6 +32,46 @@ function createApp() {
             app: 'VitalScan',
             hasApiKey: hasConfiguredApiKey(),
         });
+    });
+
+    app.get('/api/smartspectra/status', (_req, res) => {
+        res.json(getSdkStatus());
+    });
+
+    app.get('/smartspectra/status', (_req, res) => {
+        res.json(getSdkStatus());
+    });
+
+    app.post('/api/smartspectra/session/start', async (req, res) => {
+        try {
+            res.json(await startSmartSpectraSession(req.body || {}));
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ error: error.message });
+        }
+    });
+
+    app.post('/api/smartspectra/session/stop', async (_req, res) => {
+        try {
+            res.json(await stopSmartSpectraSession());
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ error: error.message });
+        }
+    });
+
+    app.post('/api/smartspectra/insights', (req, res) => {
+        try {
+            res.json(requestInsight(req.body?.prompt));
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ error: error.message });
+        }
+    });
+
+    app.post('/api/smartspectra/frame', (req, res) => {
+        try {
+            res.json(sendCustomFrame(req.body || {}));
+        } catch (error) {
+            res.status(error.statusCode || 500).json({ error: error.message });
+        }
     });
 
     app.use((_req, res) => {

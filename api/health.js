@@ -1,4 +1,4 @@
-const { hasConfiguredApiKey } = require('../app');
+const { hasConfiguredApiKey } = require('../services/smartspectra');
 
 module.exports = function healthHandler(_req, res) {
     res.status(200).json({

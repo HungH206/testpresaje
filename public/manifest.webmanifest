@@ -1,0 +1,17 @@
+{
+  "name": "VitalScan",
+  "short_name": "VitalScan",
+  "description": "Whole-camera wellness scanner for desktop and mobile testing.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1720",
+  "theme_color": "#0f1720",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

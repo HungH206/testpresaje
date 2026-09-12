@@ -4,14 +4,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#0f1720">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="VitalScan">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self';">
     <title>VitalScan</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="./icons/icon.svg">
     <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
     <header class="app-header">
         <div>
-            <p class="eyebrow">wellness camera check</p>
+            <p class="eyebrow">whole-camera wellness check</p>
             <h1>VitalScan</h1>
         </div>
         <span id="statusBadge" class="status">Ready</span>
@@ -21,9 +27,9 @@
         <section class="scanner" aria-label="Camera scanner">
             <div class="camera-wrap">
                 <video id="camera" autoplay playsinline muted></video>
-                <canvas id="sampleCanvas" width="96" height="96" hidden></canvas>
+                <canvas id="sampleCanvas" width="320" height="240" hidden></canvas>
                 <div class="target-ring" aria-hidden="true"></div>
-                <div id="cameraPrompt" class="camera-prompt">Place a fingertip over the camera, turn on good light, then start a scan.</div>
+                <div id="cameraPrompt" class="camera-prompt">Frame your face and upper chest with steady lighting, then start a scan.</div>
             </div>
 
             <div class="toolbar">
@@ -35,14 +41,14 @@
 
         <section class="readouts" aria-label="Current scan results">
             <article class="metric primary">
-                <span>Pulse estimate</span>
+                <span>Pulse</span>
                 <strong><span id="pulseValue">--</span> bpm</strong>
-                <small id="confidenceText">Waiting for scan</small>
+                <small id="confidenceText">Camera quality mode on hosted iPhone tests</small>
             </article>
             <article class="metric">
                 <span>Signal quality</span>
                 <strong id="qualityValue">--</strong>
-                <small>Keep finger still and cover the lens</small>
+                <small>Keep the camera still with your face and upper chest visible</small>
             </article>
             <article class="metric">
                 <span>Scan time</span>
@@ -82,8 +88,23 @@
             <div id="historyList" class="history-list"></div>
         </section>
 
+        <section class="insights" aria-label="AI insights">
+            <div class="section-heading">
+                <h2>AI Insight</h2>
+                <span id="insightStatus">SmartSpectra optional</span>
+            </div>
+            <form id="insightForm">
+                <label>
+                    Prompt
+                    <input id="insightPrompt" type="text" value="Summarize my current vital signs and flag anything unusual.">
+                </label>
+                <button type="submit">Request Insight</button>
+            </form>
+            <div id="insightResult" class="insight-result">Start a SmartSpectra SDK session before requesting grounded insights.</div>
+        </section>
+
         <aside class="notice">
-            Camera estimates are for wellness tracking only and can be wrong. Do not use this app for emergencies, diagnosis, or medication decisions.
+            Whole-camera estimates are for wellness tracking only and can be wrong. Do not use this app for emergencies, diagnosis, or medication decisions.
         </aside>
     </main>
 
