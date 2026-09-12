@@ -11,6 +11,7 @@ let lastMetricsAt = null;
 let lastFrame = null;
 let lastInsight = null;
 let lastError = null;
+let stoppingSession = null;
 let metricsPacketCount = 0;
 let arterialPressureSeries = [];
 const maxSeriesPoints = 600;
@@ -72,6 +73,7 @@ function getSdkStatus() {
         sessionStartedAt: activeSessionStartedAt,
         activeSource,
         processingStatus,
+        sessionFailed: processingStatus === sdk.ProcessingStatus?.kError || Boolean(lastError && !lastError.retryable),
         validationStatus,
         latestVitals,
         metricsPacketCount,
@@ -142,8 +144,13 @@ function configureInputSource(session, options = {}) {
 }
 
 async function startSmartSpectraSession(options = {}) {
+    if (stoppingSession) await stoppingSession;
     if (activeSession) {
-        return getSdkStatus();
+        if (getSdkStatus().sessionFailed) {
+            await stopSmartSpectraSession();
+        } else {
+            return getSdkStatus();
+        }
     }
 
     const session = createSmartSpectraSession();
@@ -157,6 +164,7 @@ async function startSmartSpectraSession(options = {}) {
     arterialPressureSeries = [];
     lastInsight = null;
     lastError = null;
+    lastFrame = null;
 
     session.on('insight', (buffer, requestId) => {
         lastInsight = {
@@ -193,6 +201,7 @@ async function startSmartSpectraSession(options = {}) {
     });
 
     session.on('error', (code, message, retryable) => {
+        if (lastError && !lastError.retryable) return;
         lastError = {
             code,
             message,
@@ -213,6 +222,7 @@ async function startSmartSpectraSession(options = {}) {
 }
 
 async function stopSmartSpectraSession() {
+    if (stoppingSession) return stoppingSession;
     if (!activeSession) {
         return getSdkStatus();
     }
@@ -222,17 +232,20 @@ async function stopSmartSpectraSession() {
     activeSessionStartedAt = null;
     activeSource = null;
 
-    if (typeof session.stopAsync === 'function') {
-        await session.stopAsync();
-    } else if (typeof session.stop === 'function') {
-        session.stop();
+    stoppingSession = (async () => {
+        try {
+            if (typeof session.stopAsync === 'function') await session.stopAsync();
+            else if (typeof session.stop === 'function') session.stop();
+        } finally {
+            if (typeof session.destroy === 'function') await session.destroy();
+        }
+        return getSdkStatus();
+    })();
+    try {
+        return await stoppingSession;
+    } finally {
+        stoppingSession = null;
     }
-
-    if (typeof session.destroy === 'function') {
-        await session.destroy();
-    }
-
-    return getSdkStatus();
 }
 
 function requestInsight(prompt) {
@@ -296,6 +309,11 @@ function sanitizeHrv(hrv) {
 
 function sendCustomFrame(frame) {
     const sdk = loadSdkExports();
+    if (processingStatus === sdk.ProcessingStatus?.kError || (lastError && !lastError.retryable)) {
+        const error = new Error(lastError?.message || 'SmartSpectra processing stopped. Start a new scan.');
+        error.statusCode = 409;
+        throw error;
+    }
 
     if (!activeSession || activeSource !== 'custom') {
         return {
@@ -310,13 +328,13 @@ function sendCustomFrame(frame) {
     const height = Number(frame.height);
     const timestampUs = Number(frame.timestampUs);
 
-    if (!width || !height || !timestampUs || !frame.rgbaBase64) {
+    if (!width || !height || !timestampUs || (!frame.rgbaBase64 && !frame.rgba)) {
         const error = new Error('Frame payload requires width, height, timestampUs, and rgbaBase64.');
         error.statusCode = 400;
         throw error;
     }
 
-    const buffer = Buffer.from(frame.rgbaBase64, 'base64');
+    const buffer = frame.rgba ? Buffer.from(frame.rgba) : Buffer.from(frame.rgbaBase64, 'base64');
     const stride = width * 4;
     const expectedBytes = stride * height;
 

@@ -17,6 +17,17 @@
     box-sizing: border-box;
 }
 
+[hidden] { display: none !important; }
+.camera-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+.camera-tabs button { white-space: normal; }
+.camera-tabs button[aria-selected="false"] { background: transparent; border-color: var(--line); color: var(--text); }
+#phoneCameraPanel { padding: 20px; min-height: 240px; }
+#phoneAddress { display: block; width: 100%; min-width: 0; margin: 12px 0; }
+#phoneScanLink { display: block; overflow-wrap: anywhere; color: var(--accent-2); }
+.livekit-settings { display: grid; gap: 8px; padding: 12px; }
+.livekit-settings input { width: 100%; min-width: 0; }
+#livekitRates { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+
 html {
     min-height: 100%;
     background: var(--bg);

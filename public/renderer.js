@@ -53,8 +53,6 @@ const scan = {
     sdkStreaming: false,
     nativeSessionEnabled: false,
     nativeCameraMode: false,
-    lastFrameSentAt: 0,
-    frameInFlight: false,
     lastPixels: null,
 };
 
@@ -62,39 +60,42 @@ const historyKey = 'vitalscan-history';
 const maxSamples = 900;
 const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 const query = new URLSearchParams(window.location.search);
-const forceNativeStreaming = query.get('native') === '1';
-const forceBrowserBridge = query.get('bridge') === '1';
-const useBrowserFrameBridge = forceBrowserBridge || (!isLocalHost && forceNativeStreaming);
-const frameWidth = Math.max(160, Math.min(640, Number(query.get('w') || 480)));
-const frameHeight = Math.max(120, Math.min(480, Number(query.get('h') || 270)));
-const targetBridgeFps = Math.max(5, Math.min(30, Number(query.get('fps') || 15)));
-const frameIntervalMs = Math.round(1000 / targetBridgeFps);
+const useBrowserFrameBridge = !(isLocalHost && query.get('camera') === 'server');
+const phoneCapture = query.get('capture') === 'phone';
+let watchingPhone = false;
+let latestStatus = null;
+let statusInFlight = false;
+let frameWidth = Math.max(160, Math.min(640, Number(query.get('w') || 480)));
+let frameHeight = Math.max(120, Math.min(480, Number(query.get('h') || 270)));
 
 els.canvas.width = frameWidth;
 els.canvas.height = frameHeight;
 
 function setModeLinks() {
     const base = `${window.location.origin}${window.location.pathname}`;
-    els.modeLocalLink.href = base;
-    els.modeBridgeLink.href = `${base}?bridge=1&w=${frameWidth}&h=${frameHeight}&fps=${targetBridgeFps}`;
-    els.modeIphoneLink.href = `${base}?native=1&w=320&h=240&fps=30`;
+    els.modeLocalLink.href = `${base}?camera=server`;
+    els.modeLocalLink.hidden = !isLocalHost;
+    els.modeBridgeLink.href = base;
+    els.modeIphoneLink.href = `${base}?capture=phone`;
 }
 
 function describePipeline(status = {}) {
     if (!status.nativeSessionEnabled) return 'Hosted UI only';
     if (status.activeSource === 'camera') return 'Express -> SmartSpectra useCamera()';
-    if (status.activeSource === 'custom') return 'iPhone/browser -> Express -> SmartSpectra useCustomInput()';
-    if (useBrowserFrameBridge) return 'Ready for browser frame bridge';
+    if (status.activeSource === 'custom') return 'Camera -> LiveKit -> SmartSpectra';
+    if (useBrowserFrameBridge) return 'LiveKit camera';
     return 'Ready for native Mac camera';
 }
 
 function renderRunMode(status = {}) {
     const source = status.activeSource || (useBrowserFrameBridge ? 'custom' : 'camera');
-    els.modeStatus.textContent = status.sessionActive ? 'SDK running' : 'Ready';
+    els.modeStatus.textContent = !status.nativeSessionEnabled
+        ? 'Processing backend unavailable'
+        : (status.sessionActive ? 'SDK running' : 'Ready');
     els.modePipeline.textContent = describePipeline(status);
     els.modeCamera.textContent = source === 'camera'
         ? '1280x720 at 30fps'
-        : `${frameWidth}x${frameHeight} at ${targetBridgeFps}fps`;
+        : (status.lastFrame ? `${status.lastFrame.width}x${status.lastFrame.height}` : 'LiveKit video, 30fps requested');
     els.modeMetrics.textContent = status.requestedMetricCount
         ? `${status.requestedMetricCount} cardio metrics`
         : '--';
@@ -113,8 +114,6 @@ function resetScan() {
     scan.quality = 0;
     scan.sdkStreaming = false;
     scan.nativeCameraMode = false;
-    scan.lastFrameSentAt = 0;
-    scan.frameInFlight = false;
     scan.lastPixels = null;
     els.pulse.textContent = '--';
     els.pressure.textContent = '--';
@@ -132,6 +131,7 @@ async function startCamera() {
     const constraints = {
         video: {
             facingMode: { ideal: 'user' },
+            frameRate: { ideal: 30, min: 25 },
             width: { ideal: 1280 },
             height: { ideal: 720 },
         },
@@ -141,6 +141,11 @@ async function startCamera() {
     scan.stream = await navigator.mediaDevices.getUserMedia(constraints);
     els.camera.srcObject = scan.stream;
     await els.camera.play();
+    const scale = Math.min(frameWidth / els.camera.videoWidth, frameHeight / els.camera.videoHeight);
+    frameWidth = Math.max(2, Math.round(els.camera.videoWidth * scale / 2) * 2);
+    frameHeight = Math.max(2, Math.round(els.camera.videoHeight * scale / 2) * 2);
+    els.canvas.width = frameWidth;
+    els.canvas.height = frameHeight;
 }
 
 function stopCamera() {
@@ -149,16 +154,6 @@ function stopCamera() {
     }
     scan.stream = null;
     els.camera.srcObject = null;
-}
-
-function rgbaToBase64(data) {
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < data.length; i += chunkSize) {
-        const chunk = data.subarray(i, i + chunkSize);
-        binary += String.fromCharCode(...chunk);
-    }
-    return btoa(binary);
 }
 
 function readWholeFrame() {
@@ -207,23 +202,21 @@ function readWholeFrame() {
         brightness,
         motion,
         quality,
-        rgbaBase64: rgbaToBase64(pixels),
     };
 }
 
 async function startSdkStream() {
-    if (!isLocalHost && !forceNativeStreaming) {
-        scan.nativeSessionEnabled = false;
-        scan.sdkStreaming = false;
-        els.confidence.textContent = 'Hosted iPhone camera test mode';
-        return false;
+    if (useBrowserFrameBridge) {
+        await window.vitalLivekit.start(scan.stream);
+        scan.sdkStreaming = true;
+        scan.nativeCameraMode = false;
+        return true;
     }
-
     await pollSdkStatus();
 
     if (!scan.nativeSessionEnabled) {
         scan.sdkStreaming = false;
-        els.confidence.textContent = 'iPhone HTTPS camera test mode';
+        els.confidence.textContent = 'Processing backend unavailable';
         return false;
     }
 
@@ -263,6 +256,11 @@ async function startSdkStream() {
 }
 
 async function stopSdkStream() {
+    if (useBrowserFrameBridge) {
+        await window.vitalLivekit.disconnect();
+        scan.sdkStreaming = false;
+        return;
+    }
     if (!scan.sdkStreaming) return;
 
     try {
@@ -273,47 +271,6 @@ async function stopSdkStream() {
 
     scan.sdkStreaming = false;
     scan.nativeCameraMode = false;
-}
-
-async function sendFrameToSdk(frame) {
-    if (!scan.sdkStreaming || scan.nativeCameraMode) return;
-    if (scan.frameInFlight) return;
-
-    const now = performance.now();
-    if (now - scan.lastFrameSentAt < frameIntervalMs) return;
-    scan.lastFrameSentAt = now;
-    scan.frameInFlight = true;
-
-    try {
-        const response = await fetch('/api/smartspectra/frame', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                width: frameWidth,
-                height: frameHeight,
-                timestampUs: Math.round(performance.timeOrigin * 1000 + now * 1000),
-                rgbaBase64: frame.rgbaBase64,
-            }),
-        });
-
-        if (!response.ok) {
-            scan.sdkStreaming = false;
-            scan.nativeCameraMode = false;
-            return;
-        }
-
-        const payload = await response.json();
-        if (payload.accepted === false || payload.hostedMode) {
-            scan.sdkStreaming = false;
-            scan.nativeCameraMode = false;
-            els.confidence.textContent = payload.message || 'Hosted iPhone camera test mode';
-        }
-    } catch {
-        scan.sdkStreaming = false;
-        scan.nativeCameraMode = false;
-    } finally {
-        scan.frameInFlight = false;
-    }
 }
 
 function renderQuality(frame) {
@@ -388,15 +345,46 @@ function drawChart(series = null) {
 }
 
 async function pollSdkStatus() {
-    if (!isLocalHost && !forceNativeStreaming) {
-        scan.nativeSessionEnabled = false;
-        els.insightStatus.textContent = 'Hosted camera test mode';
-        return;
-    }
-
+    if (statusInFlight) return;
+    statusInFlight = true;
     try {
-        const response = await fetch('/api/smartspectra/status');
-        const status = await response.json();
+        let status;
+        if (useBrowserFrameBridge || watchingPhone) {
+            status = window.vitalLivekit.getStatus();
+            const transport = status.transport || {};
+            $('livekitRates').textContent = `Capture ${transport.captureFps == null ? '--' : transport.captureFps.toFixed(1)} fps / Received ${(transport.receivedFps || 0).toFixed(1)} fps / Accepted ${(transport.acceptedFps || 0).toFixed(1)} fps`;
+            if (transport.error) {
+                els.confidence.textContent = transport.error;
+                $('phoneConnection').textContent = transport.error;
+                if (scan.sdkStreaming) await stopScan();
+                setStatus('Scan interrupted', 'error');
+                return;
+            }
+        } else {
+            const response = await fetch('/api/smartspectra/status');
+            if (!response.ok) throw new Error('Status unavailable');
+            status = await response.json();
+        }
+        latestStatus = status;
+        if (status.sessionFailed || (status.lastError && status.lastError.retryable === false)) {
+            const message = status.validationStatus?.code === 11
+                ? status.validationStatus.hint
+                : (status.lastError?.message || 'Processing stopped. Start a new scan.');
+            if (scan.sdkStreaming) await stopScan();
+            els.confidence.textContent = message;
+            els.prompt.textContent = message;
+            $('phoneConnection').textContent = message;
+            setStatus('Scan interrupted', 'error');
+            renderRunMode(status);
+            return;
+        }
+        if (watchingPhone) {
+            const connected = status.sessionActive && status.activeSource === 'custom';
+            $('phoneConnection').textContent = !status.nativeSessionEnabled
+                ? 'Processing backend unavailable'
+                : (connected ? 'Camera connected' : 'Waiting for phone');
+            setStatus(connected ? 'Receiving' : 'Waiting', connected ? 'running' : 'ready');
+        }
         const vitals = status.latestVitals || {};
         const pulseRate = vitals.pulseRate;
         scan.nativeSessionEnabled = Boolean(status.nativeSessionEnabled);
@@ -428,7 +416,7 @@ async function pollSdkStatus() {
             drawChart(status.arterialPressureSeries);
         }
 
-        if (status.activeSource === 'camera') {
+        if (status.activeSource === 'camera' || watchingPhone) {
             els.sampleCount.textContent = `${status.metricsPacketCount || 0} metric packets`;
             if (status.sessionStartedAt) {
                 const elapsed = (Date.now() - new Date(status.sessionStartedAt).getTime()) / 1000;
@@ -450,8 +438,13 @@ async function pollSdkStatus() {
                 : 'SDK unavailable';
         }
     } catch {
+        latestStatus = null;
+        scan.nativeSessionEnabled = false;
+        if (watchingPhone) $('phoneConnection').textContent = 'Connection lost';
         els.insightStatus.textContent = 'Status unavailable';
         renderRunMode();
+    } finally {
+        statusInFlight = false;
     }
 }
 
@@ -471,8 +464,7 @@ async function tick() {
         els.timer.textContent = String(Math.floor(frame.t));
         els.sampleCount.textContent = `${scan.samples.length} frames`;
         renderQuality(frame);
-        drawChart();
-        sendFrameToSdk(frame);
+        if (!scan.sdkStreaming) drawChart();
     }
 
     if (scan.samples.length % 30 === 0) pollSdkStatus();
@@ -480,6 +472,12 @@ async function tick() {
 }
 
 async function startScan() {
+    if (watchingPhone) return;
+    await pollSdkStatus();
+    if (latestStatus?.sessionActive && !latestStatus.sessionFailed && !scan.sdkStreaming) {
+        els.prompt.textContent = 'Another camera is scanning. Stop that scan before starting this camera.';
+        return;
+    }
     if (!navigator.mediaDevices?.getUserMedia && useBrowserFrameBridge) {
         els.prompt.textContent = 'Camera access is not available in this browser.';
         setStatus('No camera', 'error');
@@ -490,24 +488,28 @@ async function startScan() {
         setStatus('Starting', 'busy');
         els.start.disabled = true;
         resetScan();
+        if (useBrowserFrameBridge) await startCamera();
         const sdkStarted = await startSdkStream();
-        if (!sdkStarted || !scan.nativeCameraMode) {
-            await startCamera();
+        if (!sdkStarted) {
+            throw new Error('Cannot start measurement. Check the LiveKit worker connection.');
         }
         scan.running = true;
         els.stop.disabled = false;
         els.prompt.textContent = scan.nativeCameraMode
             ? 'SmartSpectra is using the Mac camera directly. Hold still with face and upper chest visible.'
             : (scan.sdkStreaming
-                ? 'Streaming the iPhone camera to SmartSpectra. Hold still with face and upper chest visible.'
+                ? 'Hold still with your face and upper chest visible.'
                 : 'Hold still with face and upper chest in view. The whole frame is used.');
         setStatus('Scanning', 'running');
         tick();
     } catch (error) {
+        scan.running = false;
+        stopCamera();
+        await stopSdkStream();
         els.start.disabled = false;
         els.stop.disabled = true;
         els.prompt.textContent = error.message || 'Camera permission was blocked.';
-        setStatus('Camera blocked', 'error');
+        setStatus('Unable to scan', 'error');
     }
 }
 
@@ -620,13 +622,74 @@ els.insightForm.addEventListener('submit', async (event) => {
 });
 
 window.addEventListener('beforeunload', () => {
-    if (scan.sdkStreaming) {
+    if (scan.sdkStreaming && !useBrowserFrameBridge) {
         navigator.sendBeacon?.('/api/smartspectra/session/stop');
     }
+    if (useBrowserFrameBridge || watchingPhone) void window.vitalLivekit.disconnect();
     stopCamera();
+});
+window.addEventListener('livekit-lost', async () => {
+    await stopScan();
+    els.prompt.textContent = 'LiveKit connection lost. Start a new scan.';
+    setStatus('Connection lost', 'error');
 });
 
 renderHistory();
+function updatePhoneLink() {
+    try {
+        const url = new URL($('phoneAddress').value);
+        if (url.protocol !== 'https:' || url.username || url.password) throw new Error('HTTPS required');
+        url.pathname = '/';
+        url.search = '?capture=phone';
+        url.hash = '';
+        $('phoneScanLink').href = url.href;
+        $('phoneScanLink').textContent = url.href;
+        $('phoneScanLink').hidden = false;
+    } catch {
+        $('phoneScanLink').hidden = true;
+    }
+}
+
+async function selectCamera(phone) {
+    if (scan.running || scan.sdkStreaming) await stopScan();
+    await window.vitalLivekit.disconnect();
+    watchingPhone = phone;
+    for (const [id, selected] of [['macCameraTab', !phone], ['phoneCameraTab', phone]]) {
+        $(id).setAttribute('aria-selected', String(selected));
+        $(id).tabIndex = selected ? 0 : -1;
+    }
+    $('localCameraPanel').hidden = phone;
+    $('phoneCameraPanel').hidden = !phone;
+    await pollSdkStatus();
+}
+$('macCameraTab').addEventListener('click', () => selectCamera(false));
+$('phoneCameraTab').addEventListener('click', () => selectCamera(true));
+$('connectDashboard').addEventListener('click', async () => {
+    $('connectDashboard').disabled = true;
+    try {
+        await window.vitalLivekit.connect('dashboard');
+        $('phoneConnection').textContent = 'Connected to LiveKit; waiting for worker';
+    } catch (error) { $('phoneConnection').textContent = error.message; }
+    finally { $('connectDashboard').disabled = false; }
+});
+for (const id of ['macCameraTab', 'phoneCameraTab']) {
+    $(id).addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const phone = event.key === 'End' || (event.key !== 'Home' && id === 'macCameraTab');
+        $(phone ? 'phoneCameraTab' : 'macCameraTab').focus();
+        selectCamera(phone);
+    });
+}
+$('phoneAddress').value = window.location.protocol === 'https:' ? window.location.origin : '';
+$('phoneAddress').addEventListener('input', updatePhoneLink);
+updatePhoneLink();
+if (phoneCapture) {
+    document.querySelector('.camera-tabs').hidden = true;
+    $('localCameraPanel').removeAttribute('aria-labelledby');
+    $('localCameraPanel').setAttribute('aria-label', 'Phone camera');
+}
+setInterval(() => { if (watchingPhone) pollSdkStatus(); }, 1000);
 setModeLinks();
 renderRunMode();
 drawChart();

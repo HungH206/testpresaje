@@ -19,6 +19,7 @@ function createApp() {
 
     app.use(cors());
     app.use(express.json({ limit: '12mb' }));
+    app.post('/api/livekit/token', require('./services/livekit-config').tokenHandler);
     app.use(express.static(publicDir, {
         extensions: ['html'],
         setHeaders(res) {

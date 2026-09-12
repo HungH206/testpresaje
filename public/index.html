@@ -7,12 +7,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="VitalScan">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' https://*.livekit.cloud wss://*.livekit.cloud; worker-src 'self' blob:;">
     <title>VitalScan</title>
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="./icons/icon.svg">
-    <link rel="stylesheet" href="./styles.css?v=20260912-run-mode">
+    <link rel="stylesheet" href="./styles.css?v=20260912-camera-tabs">
 </head>
 <body>
     <header class="app-header">
@@ -25,6 +25,23 @@
 
     <main class="shell">
         <section class="scanner" aria-label="Camera scanner">
+            <div class="livekit-settings">
+                <label for="livekitCode">Test access code</label>
+                <input id="livekitCode" type="password" autocomplete="off">
+                <span id="livekitRates" role="status">Capture -- fps / Received -- fps / Accepted -- fps</span>
+            </div>
+            <div class="camera-tabs" role="tablist" aria-label="Camera source">
+                <button id="macCameraTab" type="button" role="tab" aria-selected="true" aria-controls="localCameraPanel">Use Mac Camera</button>
+                <button id="phoneCameraTab" type="button" role="tab" aria-selected="false" aria-controls="phoneCameraPanel" tabindex="-1">Use Phone Camera</button>
+            </div>
+            <div id="phoneCameraPanel" role="tabpanel" aria-labelledby="phoneCameraTab" hidden>
+                <label for="phoneAddress">Deployed website address</label>
+                <input id="phoneAddress" type="url" placeholder="https://your-app.vercel.app" autocomplete="off">
+                <a id="phoneScanLink" hidden target="_blank" rel="noopener">Open phone scanner</a>
+                <button id="connectDashboard" type="button">Connect Dashboard</button>
+                <p id="phoneConnection" role="status">Waiting for phone</p>
+            </div>
+            <div id="localCameraPanel" role="tabpanel" aria-labelledby="macCameraTab">
             <div class="camera-wrap">
                 <video id="camera" autoplay playsinline muted></video>
                 <canvas id="sampleCanvas" width="320" height="240" hidden></canvas>
@@ -37,13 +54,14 @@
                 <button id="stopButton" type="button" disabled>Stop</button>
                 <button id="saveButton" type="button" disabled>Save</button>
             </div>
+            </div>
         </section>
 
         <section class="readouts" aria-label="Current scan results">
             <article class="metric primary">
                 <span>Pulse</span>
                 <strong><span id="pulseValue">--</span> bpm</strong>
-                <small id="confidenceText">Camera quality mode on hosted iPhone tests</small>
+                <small id="confidenceText">Waiting for scan</small>
             </article>
             <article class="metric">
                 <span>Signal quality</span>
@@ -96,9 +114,9 @@
                 </div>
             </dl>
             <div class="mode-links">
-                <a id="modeLocalLink" href="/">Mac native</a>
-                <a id="modeBridgeLink" href="/?bridge=1">Browser bridge</a>
-                <a id="modeIphoneLink" href="/?native=1">iPhone tunnel</a>
+                <a id="modeLocalLink" href="/?camera=server">Mac camera</a>
+                <a id="modeBridgeLink" href="/">Device camera</a>
+                <a id="modeIphoneLink" href="/?capture=phone">Phone scanner</a>
             </div>
         </section>
 
@@ -153,6 +171,7 @@
         </aside>
     </main>
 
-    <script src="./renderer.js?v=20260912-run-mode"></script>
+    <script src="./livekit.bundle.js"></script>
+    <script src="./renderer.js?v=20260912-livekit"></script>
 </body>
 </html>

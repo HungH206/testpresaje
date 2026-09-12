@@ -4,6 +4,11 @@
   "description": "Browser-based wellness vital scanner for desktop and mobile.",
   "main": "app.js",
   "scripts": {
+    "build": "esbuild public/livekit-client.js --bundle --format=iife --minify --outfile=public/livekit.bundle.js",
+    "predev": "npm run build",
+    "prestart": "npm run build",
+    "worker": "node scripts/livekit-worker.js",
+    "test:livekit": "node --check scripts/livekit-worker.js && node --test scripts/livekit.test.js scripts/session-recovery.test.js",
     "start": "node server.js",
     "dev": "node server.js",
     "test:cardio": "node scripts/test-cardio-camera.js",
@@ -22,11 +27,14 @@
   },
   "homepage": "https://github.com/HungH206/testpresaje#readme",
   "dependencies": {
+    "@livekit/rtc-node": "^1.0.0",
     "@smartspectra/node-sdk": "^3.3.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "livekit-client": "^2.22.3",
+    "livekit-server-sdk": "^2.19.0"
   }
 }

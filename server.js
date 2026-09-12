@@ -7,7 +7,7 @@ const host = process.env.HOST || '127.0.0.1';
 
 const server = app.listen(port, host, () => {
     console.log(`VitalScan running at http://${host === '127.0.0.1' ? 'localhost' : host}:${port}`);
-    console.log('Phone camera testing requires HTTPS. Deploy it or expose it with an HTTPS tunnel.');
+    console.log('Phone scanning uses the HTTPS deployment and LiveKit. Run npm run worker on the processing Mac.');
 });
 
 server.on('error', (error) => {
