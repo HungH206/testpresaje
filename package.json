@@ -2,11 +2,11 @@
   "name": "testpresaje",
   "version": "1.0.0",
   "description": "Browser-based wellness vital scanner for desktop and mobile.",
-  "main": "server.js",
+  "main": "app.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --check server.js"
+    "test": "node --check app.js && node --check server.js && node --check api/health.js && node --check public/renderer.js"
   },
   "repository": {
     "type": "git",

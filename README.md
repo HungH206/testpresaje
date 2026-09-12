@@ -23,6 +23,21 @@ VITALSCAN_API_KEY=your_test_key_here
 
 The key stays on the server and is not committed to GitHub.
 
+## Express App
+
+The Express app is exported from `app.js`:
+
+```js
+const app = require('./app');
+```
+
+For platforms that need a factory instead:
+
+```js
+const { createApp } = require('./app');
+const app = createApp();
+```
+
 ## Test On Phone
 
 Mobile browsers generally require HTTPS before allowing camera access. Deploy the app to an HTTPS host, or expose your local server through an HTTPS tunnel, then open that HTTPS URL on your phone.
@@ -32,6 +47,6 @@ Mobile browsers generally require HTTPS before allowing camera access. Deploy th
 Commit the app source and lockfile:
 
 ```bash
-git add .gitignore .env.example README.md index.html package.json package-lock.json renderer.js server.js styles.css
+git add .gitignore .env.example README.md api/health.js public/index.html public/renderer.js public/styles.css package.json package-lock.json server.js vercel.json
 git commit -m "Build VitalScan web app"
 ```
